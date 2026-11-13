@@ -37,8 +37,8 @@ export type Rock = {
 export type Motion = { velocity: Vec; angularVelocity: number }
 export type TextureFrame = { anchor: Vec; angle: number }
 
-export function strengthFor(size: number): number {
-  return STRENGTH_SCALE * Math.pow(size, STRENGTH_EXPONENT)
+export function strengthFor(thickness: number): number {
+  return STRENGTH_SCALE * Math.pow(thickness, STRENGTH_EXPONENT)
 }
 
 export class RockField {
@@ -66,7 +66,8 @@ export class RockField {
     }
     const size = maxExtent(local)
     const area = polygonArea(local)
-    const strength = strengthFor(size)
+    const thickness = Math.min(size, (2 * area) / size)
+    const strength = strengthFor(thickness)
     const body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(center.x, center.y)
@@ -86,7 +87,7 @@ export class RockField {
       local,
       size,
       area,
-      thickness: Math.min(size, (2 * area) / size),
+      thickness,
       strength,
       damage,
       stress: 0,
