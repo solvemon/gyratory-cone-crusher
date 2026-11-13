@@ -54,12 +54,12 @@ function inwardDirection(normal: Vec, flipped: boolean, point: Vec, rockCenter: 
   return inward
 }
 
-function gatherContacts(world: World, rock: Rock, rocks: RockField, ignored: number | null): Contact[] {
+function gatherContacts(world: World, rock: Rock, rocks: RockField, ignored: number[]): Contact[] {
   const contacts: Contact[] = []
   const center = rock.body.translation()
   const handle = rock.collider.handle
   world.narrowPhase.contactPairsWith(handle, (other) => {
-    if (other === ignored) {
+    if (ignored.includes(other)) {
       return
     }
     world.narrowPhase.contactPair(handle, other, world.bodies, (manifold, flipped) => {
@@ -92,7 +92,7 @@ function gatherContacts(world: World, rock: Rock, rocks: RockField, ignored: num
   return contacts
 }
 
-function contactPointBetween(world: World, first: number, second: number): Vec | null {
+export function contactPointBetween(world: World, first: number, second: number): Vec | null {
   let found: Vec | null = null
   world.narrowPhase.contactPair(first, second, world.bodies, (manifold) => {
     if (manifold.numSolverContacts() > 0) {
@@ -184,7 +184,7 @@ export class Fracturer {
   rocks: RockField
   effects: Effects
   counters: FractureCounters = { cracks: 0, chips: 0, jams: 0 }
-  toolCollider: number | null = null
+  toolColliders: number[] = []
   dustSize = DUST_SIZE
 
   constructor(rocks: RockField, effects: Effects) {
@@ -213,7 +213,7 @@ export class Fracturer {
 
   private evaluate(rock: Rock, dt: number): (() => boolean) | null {
     rock.evaluated = true
-    const contacts = gatherContacts(this.rocks.world, rock, this.rocks, this.toolCollider)
+    const contacts = gatherContacts(this.rocks.world, rock, this.rocks, this.toolColliders)
     const squeeze = strongestSqueeze(contacts)
     const hardest = strongestContact(contacts)
     let squeezeForce = 0
@@ -272,12 +272,12 @@ export class Fracturer {
     return false
   }
 
-  strike(rock: Rock, hammer: number, direction: Vec): boolean {
-    const point = contactPointBetween(this.rocks.world, rock.collider.handle, hammer)
+  strike(rock: Rock, tool: number, direction: Vec, intensity: number): boolean {
+    const point = contactPointBetween(this.rocks.world, rock.collider.handle, tool)
     if (!point) {
       return false
     }
-    rock.damage = Math.min(1, rock.damage + BREAKER_BLOW_DAMAGE / Math.max(0.5, rock.size))
+    rock.damage = Math.min(1, rock.damage + (BREAKER_BLOW_DAMAGE * intensity) / Math.max(0.5, rock.size))
     rock.stress = 1
     this.effects.dust(point, 0.004, scale(direction, -1.5), 0.08)
     this.effects.spark(point, scale(direction, -1), Math.round(randomBetween(3, 7)))

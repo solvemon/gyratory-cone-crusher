@@ -1,5 +1,5 @@
 import { add, length, normalize, perpendicular, rotate, scale, sub } from './geometry.ts'
-import { BOOM, HAMMER_SHAPE } from './breaker.ts'
+import { BOOM, CHISEL_SHAPE, HOUSING_LENGTH, HOUSING_SHAPE } from './breaker.ts'
 import type { BoomPose } from './breaker.ts'
 import type { Vec } from './geometry.ts'
 import { BELT, ESSENTIAL_VIEW, MANTLE_PARTS, PIVOT, STATIC_PARTS, VIEW } from './machine.ts'
@@ -17,6 +17,10 @@ const SPRITE_MARGIN_PIXELS = 4
 const MANTLE_AXIS_LENGTH = 15
 const REBAKE_TURN = 0.35
 const MIN_VISIBLE_LOAD = 0.05
+const ROCK_SHAKE_PIXELS = 2.5
+const TOOL_SHAKE_PIXELS = 3
+const SHAKE_HZ = 22
+const MIN_VISIBLE_SHAKE = 0.03
 
 type Placement = { anchor: Vec; angle: number }
 
@@ -87,7 +91,7 @@ function contextOf(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
 }
 
 function poseSignature(pose: BoomPose, pourTarget: Vec | null): string {
-  const numbers = [pose.tip.x, pose.tip.y, pose.elbow.x, pose.elbow.y, pose.angle * 10]
+  const numbers = [pose.tip.x, pose.tip.y, pose.chisel.x, pose.chisel.y, pose.elbow.x, pose.elbow.y, pose.angle * 10]
   if (pourTarget) {
     numbers.push(pourTarget.x, pourTarget.y)
   }
@@ -161,7 +165,7 @@ export class Renderer {
     this.drawPuffs(sim)
     this.drawSparks(sim)
     this.drawMantleSprite(sim.machine.angle)
-    this.drawTools(sim.breaker.pose(), pourTarget)
+    this.drawTools(this.shaken(sim.breaker.pose(), sim.breaker.shake, sim.time), pourTarget)
   }
 
   private paintOn(canvas: HTMLCanvasElement, paint: () => void) {
@@ -227,6 +231,15 @@ export class Renderer {
     ctx.rotate(-angle)
     ctx.drawImage(sprite.image, spriteLeft - pivotX, spriteTop - pivotY, sprite.width, sprite.height)
     this.useWorldTransform()
+  }
+
+  private shaken(pose: BoomPose, shake: number, time: number): BoomPose {
+    const offset = (vibration(shake, time, 0) * TOOL_SHAKE_PIXELS) / this.frame.scale
+    if (offset === 0) {
+      return pose
+    }
+    const along = { x: -Math.cos(pose.angle) * offset, y: -Math.sin(pose.angle) * offset }
+    return { ...pose, tip: add(pose.tip, along), chisel: add(pose.chisel, along) }
   }
 
   private drawTools(pose: BoomPose, pourTarget: Vec | null) {
@@ -297,8 +310,12 @@ export class Renderer {
       const sprite = this.rockSpriteFor(sim.rocks, rock, angle)
       sprite.lastDrawn = this.frameNumber
       const center = rock.body.translation()
+      const wobble = vibration(rock.shake, sim.time, rock.shakeDirection) * ROCK_SHAKE_PIXELS
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.translate(originX + center.x * scale, originY - center.y * scale)
+      ctx.translate(
+        originX + center.x * scale + Math.cos(rock.shakeDirection) * wobble,
+        originY - center.y * scale + Math.sin(rock.shakeDirection) * wobble,
+      )
       ctx.rotate(sprite.angle - angle)
       ctx.drawImage(sprite.image, -sprite.centerX, -sprite.centerY, sprite.width, sprite.height)
     }
@@ -535,7 +552,7 @@ export class Renderer {
   private drawBreaker(pose: BoomPose) {
     const ctx = this.context
     const { shoulder, elbow, tip, angle } = pose
-    const hammerBack = add(tip, rotate({ x: 1.5, y: 0 }, angle))
+    const hammerBack = add(tip, rotate({ x: HOUSING_LENGTH, y: 0 }, angle))
     const pedestal = BOOM.pedestal
     this.drawPainted([
       { x: pedestal.x - 0.35, y: pedestal.y },
@@ -566,7 +583,11 @@ export class Renderer {
     this.drawPainted(beam(sleeveEnd, hammerBack, 0.1), { anchor: sleeveEnd, angle: stickHeading })
     this.drawPainted(beam(elbow, sleeveEnd, 0.17), { anchor: elbow, angle: stickHeading })
     this.drawSteel(
-      HAMMER_SHAPE.map((p) => add(rotate(p, angle), tip)),
+      CHISEL_SHAPE.map((p) => add(rotate(p, angle), pose.chisel)),
+      { anchor: pose.chisel, angle },
+    )
+    this.drawSteel(
+      HOUSING_SHAPE.map((p) => add(rotate(p, angle), tip)),
       { anchor: tip, angle },
     )
     for (const joint of [shoulder, elbow]) {
@@ -638,6 +659,13 @@ function toBitmap(source: HTMLCanvasElement): ImageBitmap {
   const copy = new OffscreenCanvas(source.width, source.height)
   copy.getContext('2d')?.drawImage(source, 0, 0)
   return copy.transferToImageBitmap()
+}
+
+function vibration(level: number, time: number, phase: number): number {
+  if (level < MIN_VISIBLE_SHAKE) {
+    return 0
+  }
+  return level * Math.sin(2 * Math.PI * SHAKE_HZ * time + phase)
 }
 
 function turnBetween(from: number, to: number): number {

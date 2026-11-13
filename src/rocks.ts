@@ -25,6 +25,8 @@ export type Rock = {
   stress: number
   chipLoad: number
   steelDepth: number
+  shake: number
+  shakeDirection: number
   evaluated: boolean
   chipCooldown: number
   look: RockLook
@@ -90,6 +92,8 @@ export class RockField {
       stress: 0,
       chipLoad: 0,
       steelDepth: 0,
+      shake: 0,
+      shakeDirection: 0,
       evaluated: false,
       chipCooldown: 0,
       look,

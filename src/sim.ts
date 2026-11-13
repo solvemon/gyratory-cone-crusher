@@ -7,7 +7,7 @@ import { BELT, Machine } from './machine.ts'
 import { Pourer } from './pour.ts'
 import { RockField } from './rocks.ts'
 import type { Rock } from './rocks.ts'
-import { BELT_SPEED, CANDIDATE_RATIO, GRAVITY, LOAD_SMOOTHING, SOLVER_ITERATIONS, STEP_DT } from './tuning.ts'
+import { BELT_SPEED, BREAKER_SHAKE_DECAY, CANDIDATE_RATIO, GRAVITY, LOAD_SMOOTHING, SOLVER_ITERATIONS, STEP_DT } from './tuning.ts'
 
 const KILL_ZONE = { left: -14, right: 14.5, bottom: -7, top: 40 }
 
@@ -25,6 +25,7 @@ export class Sim {
   fracturer: Fracturer
   breaker: Breaker
   timings = { physics: 0, fracture: 0 }
+  time = 0
 
   constructor() {
     this.world = new RAPIER.World({ x: 0, y: GRAVITY })
@@ -37,11 +38,12 @@ export class Sim {
     this.pourer = new Pourer(this.world, this.rocks)
     this.fracturer = new Fracturer(this.rocks, this.effects)
     this.breaker = new Breaker(this.world)
-    this.fracturer.toolCollider = this.breaker.collider.handle
+    this.fracturer.toolColliders = this.breaker.toolColliders
   }
 
   step(dt: number, mantleCatchUp = 1) {
     this.world.timestep = dt
+    this.time += dt
     this.machine.update(dt * mantleCatchUp)
     this.pourer.update(dt)
     this.breaker.update(dt)
@@ -85,6 +87,7 @@ export class Sim {
 
   private updateRocks(dt: number) {
     const fade = Math.exp(-dt / LOAD_SMOOTHING)
+    const shakeFade = Math.exp(-dt / BREAKER_SHAKE_DECAY)
     const expired: Rock[] = []
     for (const rock of this.rocks.byCollider.values()) {
       if (!rock.evaluated) {
@@ -92,6 +95,7 @@ export class Sim {
         rock.chipLoad *= fade
         rock.steelDepth *= fade
       }
+      rock.shake *= shakeFade
       rock.evaluated = false
       rock.chipCooldown -= dt
       const position = rock.body.translation()
