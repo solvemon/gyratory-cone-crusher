@@ -18,6 +18,13 @@ const POUR_ZONE = { left: -6.8, right: 6.8, bottom: 16.6, top: 21.6 }
 const MAX_BUDGET = 4
 const PLACEMENT_TRIES = 12
 const THROW_SPREAD = 3.5
+const HOPPER_FLOOR_Y = 13.5
+const AUTO_FEED_START_BELOW = 16
+const AUTO_FEED_STOP_ABOVE = 24
+const AUTO_FEED_SWEEP = 5
+const AUTO_FEED_SWEEP_RATE = 0.7
+const AUTO_FEED_HEIGHT = 20
+const LEVEL_CHECK_SECONDS = 0.25
 const THROW_TILT = 0.5
 
 function pickGrade(): Grade {
@@ -64,6 +71,10 @@ export class Pourer {
   budget = 0
   pouredArea = 0
   pending: Pending | null = null
+  autoFeed = false
+  private feeding = false
+  private levelCheckIn = 0
+  private elapsed = 0
   private throws: Throw[] = []
 
   constructor(world: World, rocks: RockField) {
@@ -77,7 +88,12 @@ export class Pourer {
 
   update(dt: number) {
     this.placeThrow()
-    if (!this.target) {
+    this.elapsed += dt
+    let target = this.target
+    if (!target) {
+      target = this.autoFeedTarget(dt)
+    }
+    if (!target) {
       this.budget = 0
       return
     }
@@ -87,7 +103,7 @@ export class Pourer {
         return
       }
       const next = this.nextPending()
-      const placed = this.tryPlace(next, this.target)
+      const placed = this.tryPlace(next, target)
       if (!placed) {
         return
       }
@@ -128,6 +144,37 @@ export class Pourer {
   private hasOpenSky(center: Vec): boolean {
     const upward = new RAPIER.Ray(center, { x: 0, y: 1 })
     return this.world.castRay(upward, POUR_ZONE.top + 2 - center.y, true) === null
+  }
+
+  private autoFeedTarget(dt: number): Vec | null {
+    if (!this.autoFeed) {
+      this.feeding = false
+      return null
+    }
+    this.levelCheckIn -= dt
+    if (this.levelCheckIn <= 0) {
+      this.levelCheckIn = LEVEL_CHECK_SECONDS
+      this.checkHopperLevel()
+    }
+    if (!this.feeding) {
+      return null
+    }
+    return { x: Math.sin(this.elapsed * AUTO_FEED_SWEEP_RATE) * AUTO_FEED_SWEEP, y: AUTO_FEED_HEIGHT }
+  }
+
+  private checkHopperLevel() {
+    let held = 0
+    for (const rock of this.rocks.byCollider.values()) {
+      if (rock.body.translation().y > HOPPER_FLOOR_Y) {
+        held += rock.area
+      }
+    }
+    if (held < AUTO_FEED_START_BELOW) {
+      this.feeding = true
+    }
+    if (held > AUTO_FEED_STOP_ABOVE) {
+      this.feeding = false
+    }
   }
 
   private placeThrow() {

@@ -11,6 +11,7 @@ export type Settings = {
   panelCollapsed: boolean
   autoDispatch: boolean
   solverOpen: boolean
+  autoFeed: boolean
 }
 
 const STORAGE_KEY = 'crusher-settings'
@@ -23,6 +24,7 @@ const DEFAULTS: Settings = {
   panelCollapsed: false,
   autoDispatch: false,
   solverOpen: true,
+  autoFeed: false,
 }
 
 function storedField<T>(stored: Record<string, unknown>, key: keyof Settings, isValid: (value: unknown) => boolean): T {
@@ -51,6 +53,7 @@ export function loadSettings(): Settings {
     panelCollapsed: storedField(fields, 'panelCollapsed', isBoolean),
     autoDispatch: storedField(fields, 'autoDispatch', isBoolean),
     solverOpen: storedField(fields, 'solverOpen', isBoolean),
+    autoFeed: storedField(fields, 'autoFeed', isBoolean),
   }
 }
 

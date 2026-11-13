@@ -55,6 +55,8 @@ const dispatchSelector = element<HTMLButtonElement>('dispatch')
 const manualDispatchLegend = element<HTMLSpanElement>('dispatch-manual')
 const autoDispatchLegend = element<HTMLSpanElement>('dispatch-auto')
 const truckLamp = element<HTMLSpanElement>('truck-lamp')
+const feedLamp = element<HTMLSpanElement>('feed-lamp')
+const autoFeedButton = element<HTMLButtonElement>('auto-feed')
 const solver = element<HTMLDivElement>('solver')
 const solverToggle = element<HTMLButtonElement>('solver-toggle')
 const problemList = element<HTMLDivElement>('problems')
@@ -167,6 +169,12 @@ function setTool(tool: Tool) {
   saveSettings(settings)
 }
 
+function setAutoFeed(autoFeed: boolean) {
+  settings.autoFeed = autoFeed
+  feedLamp.classList.toggle('on', autoFeed)
+  saveSettings(settings)
+}
+
 function setSolverOpen(open: boolean) {
   settings.solverOpen = open
   solver.classList.toggle('closed', !open)
@@ -276,6 +284,8 @@ setSlowMotion(settings.slowMotion)
 setPanelCollapsed(settings.panelCollapsed)
 setAutoDispatch(settings.autoDispatch)
 setSolverOpen(settings.solverOpen)
+setAutoFeed(settings.autoFeed)
+autoFeedButton.addEventListener('click', () => setAutoFeed(!settings.autoFeed))
 
 let ownProblems = loadOwnProblems()
 
@@ -387,6 +397,9 @@ window.addEventListener('keydown', (event) => {
   if (event.key === '2') {
     setTool('breaker')
   }
+  if (event.key === 'f' || event.key === 'F') {
+    setAutoFeed(!settings.autoFeed)
+  }
   if (event.key === 't' || event.key === 'T') {
     setAutoDispatch(!settings.autoDispatch)
   }
@@ -435,6 +448,7 @@ function updateStats(now: number) {
 function applyControls() {
   sim.pourer.flow = settings.pourFlow
   sim.trucks.autoDispatch = settings.autoDispatch
+  sim.pourer.autoFeed = settings.autoFeed
   sim.machine.running = settings.crusherRunning
   sim.pourer.target = null
   sim.breaker.target = null
