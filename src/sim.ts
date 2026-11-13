@@ -40,9 +40,9 @@ export class Sim {
     this.fracturer.toolCollider = this.breaker.collider.handle
   }
 
-  step(dt: number) {
+  step(dt: number, mantleCatchUp = 1) {
     this.world.timestep = dt
-    this.machine.update(dt)
+    this.machine.update(dt * mantleCatchUp)
     this.pourer.update(dt)
     this.breaker.update(dt)
     const physicsStart = performance.now()

@@ -1,7 +1,8 @@
 import './style.css'
 import { mountDial } from './dial.ts'
 import { makeDraggable } from './draggable.ts'
-import { dockFor, freeArea } from './layout.ts'
+import { dockFor, dustSizeFor, freeArea } from './layout.ts'
+import { Average, Pacing } from './pacing.ts'
 import type { Dock } from './layout.ts'
 import { Renderer } from './render.ts'
 import { initPhysics, Sim } from './sim.ts'
@@ -73,6 +74,7 @@ function applyLayout() {
   panel.dataset.dock = dock
   refreshPanelPosition()
   renderer.resize(freeArea(dock, screen, panel))
+  sim.fracturer.dustSize = dustSizeFor(renderer.frame.scale)
 }
 
 function setPanelCollapsed(collapsed: boolean) {
@@ -96,6 +98,9 @@ let lastFrame = performance.now()
 let pendingTime = 0
 let fpsFrames = 0
 let fpsSince = performance.now()
+const pacing = new Pacing()
+const simulationTime = new Average()
+const drawTime = new Average()
 
 function trackPointer(event: PointerEvent) {
   const bounds = canvas.getBoundingClientRect()
@@ -152,6 +157,7 @@ function setLoadGlow(loadGlow: boolean) {
 function reset() {
   sim.free()
   sim = new Sim()
+  sim.fracturer.dustSize = dustSizeFor(renderer.frame.scale)
 }
 
 function showPourFlow() {
@@ -216,7 +222,10 @@ function updateStats(now: number) {
     return
   }
   const fps = Math.round((fpsFrames * 1000) / elapsed)
-  stats.textContent = `ROCKS ${String(sim.rocks.count).padStart(4, ' ')}   FPS ${fps}`
+  const rocks = String(sim.rocks.count).padStart(4, ' ')
+  const simulationMs = simulationTime.value.toFixed(1).padStart(4, ' ')
+  const drawMs = drawTime.value.toFixed(1).padStart(4, ' ')
+  stats.textContent = `ROCKS ${rocks}   FPS ${fps}\nSIM ${simulationMs} ms  DRAW ${drawMs} ms`
   fpsFrames = 0
   fpsSince = now
 }
@@ -237,19 +246,25 @@ function applyControls() {
 }
 
 function frame(now: number) {
-  pendingTime += Math.min(0.1, (now - lastFrame) / 1000)
+  const elapsed = Math.min(0.1, (now - lastFrame) / 1000)
+  pendingTime += elapsed
   lastFrame = now
   applyControls()
+  const simulationStart = performance.now()
   let steps = 0
   while (pendingTime >= STEP_DT && steps < MAX_STEPS_PER_FRAME) {
-    sim.step(STEP_DT * simulationSpeed())
+    sim.step(STEP_DT * simulationSpeed(), pacing.catchUp)
     pendingTime -= STEP_DT
     steps++
   }
   if (steps === MAX_STEPS_PER_FRAME) {
     pendingTime = 0
   }
+  pacing.record(elapsed, steps * STEP_DT)
+  const drawStart = performance.now()
+  simulationTime.add(drawStart - simulationStart)
   renderer.draw(sim, sim.pourer.target, settings.loadGlow)
+  drawTime.add(performance.now() - drawStart)
   updateStats(now)
   requestAnimationFrame(frame)
 }

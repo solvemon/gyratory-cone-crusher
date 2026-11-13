@@ -569,6 +569,10 @@ button:focus-visible,
   text-shadow: 0 0 6px rgba(110, 255, 130, 0.5);
 }
 
+#stats {
+  white-space: pre;
+}
+
 .lcd .hint {
   color: rgba(132, 255, 149, 0.6);
 }

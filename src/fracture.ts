@@ -155,6 +155,7 @@ export class Fracturer {
   effects: Effects
   counters: FractureCounters = { cracks: 0, chips: 0, jams: 0 }
   toolCollider: number | null = null
+  dustSize = DUST_SIZE
 
   constructor(rocks: RockField, effects: Effects) {
     this.rocks = rocks
@@ -334,7 +335,7 @@ export class Fracturer {
     })
     this.rocks.remove(rock)
     for (const { piece, center, motion } of fragments) {
-      const tooSmallToSimulate = maxExtent(piece) < DUST_SIZE
+      const tooSmallToSimulate = maxExtent(piece) < this.dustSize
       if (tooSmallToSimulate) {
         this.effects.dust(center, polygonArea(piece), motion.velocity, maxExtent(piece))
         continue
