@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier2d-compat'
-import type { World } from '@dimforge/rapier2d-compat'
+import type { Collider, World } from '@dimforge/rapier2d-compat'
 import { add, convexHull, polygonArea, randomBetween, rotate } from './geometry.ts'
 import type { Vec } from './geometry.ts'
 import type { RockField, RockLook } from './rocks.ts'
@@ -18,11 +18,10 @@ const POUR_ZONE = { left: -6.8, right: 6.8, bottom: 16.6, top: 21.6 }
 const MAX_BUDGET = 4
 const PLACEMENT_TRIES = 12
 const THROW_SPREAD = 3.5
-const HOPPER_FLOOR_Y = 13.5
-const AUTO_FEED_START_BELOW = 16
-const AUTO_FEED_STOP_ABOVE = 24
-const AUTO_FEED_SWEEP = 5
-const AUTO_FEED_SWEEP_RATE = 0.7
+const LEVEL_COLUMNS = [-4.5, -3.5, -2.5, -1.5, 1.5, 2.5, 3.5, 4.5]
+const FULL_LEVEL = POUR_ZONE.bottom - 0.4
+const REFILL_LEVEL = POUR_ZONE.bottom - 2
+const SETTLED_SPEED = 2
 const AUTO_FEED_HEIGHT = 20
 const LEVEL_CHECK_SECONDS = 0.25
 const THROW_TILT = 0.5
@@ -74,7 +73,7 @@ export class Pourer {
   autoFeed = false
   private feeding = false
   private levelCheckIn = 0
-  private elapsed = 0
+  private lowestColumn = 0
   private throws: Throw[] = []
 
   constructor(world: World, rocks: RockField) {
@@ -88,7 +87,6 @@ export class Pourer {
 
   update(dt: number) {
     this.placeThrow()
-    this.elapsed += dt
     let target = this.target
     if (!target) {
       target = this.autoFeedTarget(dt)
@@ -159,22 +157,36 @@ export class Pourer {
     if (!this.feeding) {
       return null
     }
-    return { x: Math.sin(this.elapsed * AUTO_FEED_SWEEP_RATE) * AUTO_FEED_SWEEP, y: AUTO_FEED_HEIGHT }
+    return { x: this.lowestColumn, y: AUTO_FEED_HEIGHT }
   }
 
   private checkHopperLevel() {
-    let held = 0
-    for (const rock of this.rocks.byCollider.values()) {
-      if (rock.body.translation().y > HOPPER_FLOOR_Y) {
-        held += rock.area
+    let total = 0
+    let lowestLevel = Infinity
+    for (const x of LEVEL_COLUMNS) {
+      const level = this.pileLevelAt(x)
+      total += level
+      if (level < lowestLevel) {
+        lowestLevel = level
+        this.lowestColumn = x
       }
     }
-    if (held < AUTO_FEED_START_BELOW) {
+    const averageLevel = total / LEVEL_COLUMNS.length
+    if (averageLevel < REFILL_LEVEL) {
       this.feeding = true
     }
-    if (held > AUTO_FEED_STOP_ABOVE) {
+    if (averageLevel >= FULL_LEVEL) {
       this.feeding = false
     }
+  }
+
+  private pileLevelAt(x: number): number {
+    const downward = new RAPIER.Ray({ x, y: POUR_ZONE.top }, { x: 0, y: -1 })
+    const hit = this.world.castRay(downward, POUR_ZONE.top, true, undefined, undefined, undefined, undefined, isSettled)
+    if (!hit) {
+      return 0
+    }
+    return POUR_ZONE.top - hit.timeOfImpact
   }
 
   private placeThrow() {
@@ -234,6 +246,15 @@ export class Pourer {
       this.pouredArea += rock.area
     }
   }
+}
+
+function isSettled(collider: Collider): boolean {
+  const body = collider.parent()
+  if (!body) {
+    return true
+  }
+  const velocity = body.linvel()
+  return Math.hypot(velocity.x, velocity.y) < SETTLED_SPEED
 }
 
 function clamp(value: number, min: number, max: number): number {
