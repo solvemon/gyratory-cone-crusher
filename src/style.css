@@ -545,6 +545,12 @@ button:focus-visible,
   color: rgba(132, 255, 149, 0.6);
 }
 
+@media (hover: none) {
+  .lcd .paste-hint {
+    display: none;
+  }
+}
+
 .solver {
   margin-top: 14px;
   padding-top: 8px;

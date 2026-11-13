@@ -70,6 +70,7 @@ const resetButton = element<HTMLButtonElement>('reset')
 const crushed = element<HTMLDivElement>('crushed')
 const stats = element<HTMLDivElement>('stats')
 const hint = element<HTMLDivElement>('hint')
+const pasteHint = element<HTMLDivElement>('paste-hint')
 const panel = element<HTMLDivElement>('panel')
 const nameplate = element<HTMLDivElement>('panel-nameplate')
 const collapseButton = element<HTMLButtonElement>('collapse')
@@ -233,6 +234,11 @@ function showHint() {
   hint.textContent = TOOL_HINTS[settings.tool]
 }
 
+function showPasteHint() {
+  const pasteKey = /Mac|iPhone|iPad/.test(navigator.platform) ? 'Cmd' : 'Ctrl'
+  pasteHint.textContent = `Paste to crush · ${pasteKey}-V`
+}
+
 function toggleTool() {
   if (settings.tool === 'pour') {
     setTool('breaker')
@@ -270,6 +276,7 @@ mountDial(feedDial, {
   },
 })
 showPourFlow()
+showPasteHint()
 setTool(settings.tool)
 setCrusherRunning(settings.crusherRunning)
 setPanelCollapsed(settings.panelCollapsed)
