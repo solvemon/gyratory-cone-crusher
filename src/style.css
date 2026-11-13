@@ -55,8 +55,11 @@ body {
     inset 0 -3px 0 rgba(0, 0, 0, 0.45),
     0 14px 34px rgba(0, 0, 0, 0.65);
   color: var(--legend);
-  font: 600 11px/1.2 'Arial Narrow', 'Roboto Condensed', 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Arial Narrow', 'Roboto Condensed', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
   font-stretch: condensed;
+  line-height: 1.2;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   user-select: none;
