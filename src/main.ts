@@ -22,6 +22,8 @@ const TOOL_HINTS: Record<Tool, string> = {
 
 const TRUCK_FULL_HINT = 'Truck full · tap it to send it off'
 
+const PASTED_TEXT_LIMIT = 80
+
 const SLOW_MOTION_SPEED = 0.2
 const MAX_STEPS_PER_FRAME = 4
 
@@ -192,6 +194,13 @@ async function crushPicture(file: File, x: number | null) {
   }
 }
 
+function shortened(text: string): string {
+  if (text.length <= PASTED_TEXT_LIMIT) {
+    return text
+  }
+  return `${text.slice(0, PASTED_TEXT_LIMIT - 1).trimEnd()}…`
+}
+
 function firstImage(files: FileList | null | undefined): File | null {
   const images = Array.from(files ?? []).filter((file) => file.type.startsWith('image/'))
   return images[0] ?? null
@@ -336,9 +345,20 @@ window.addEventListener('drop', (event) => {
   crushPicture(file, dropped.x)
 })
 window.addEventListener('paste', (event) => {
-  const file = firstImage(event.clipboardData?.files)
+  const clipboard = event.clipboardData
+  if (event.target instanceof HTMLInputElement || !clipboard) {
+    return
+  }
+  const file = firstImage(clipboard.files)
   if (file) {
+    event.preventDefault()
     crushPicture(file, null)
+    return
+  }
+  const text = clipboard.getData('text/plain').replace(/\s+/g, ' ').trim()
+  if (text) {
+    event.preventDefault()
+    crushProblem(shortened(text))
   }
 })
 
