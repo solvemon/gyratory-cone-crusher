@@ -4,7 +4,7 @@ import { Breaker } from './breaker.ts'
 import { Effects } from './effects.ts'
 import { Fracturer } from './fracture.ts'
 import { Hum } from './hum.ts'
-import { BELT, Machine } from './machine.ts'
+import { BELT, DISCHARGE_Y, Machine } from './machine.ts'
 import { Pourer } from './pour.ts'
 import { RockField } from './rocks.ts'
 import type { Rock } from './rocks.ts'
@@ -28,6 +28,7 @@ export class Sim {
   hum = new Hum()
   timings = { physics: 0, fracture: 0 }
   time = 0
+  private crushed = 0
 
   constructor() {
     this.world = new RAPIER.World({ x: 0, y: GRAVITY })
@@ -59,6 +60,17 @@ export class Sim {
     this.timings.fracture = performance.now() - fractureStart
     this.updateRocks(dt)
     this.effects.update(dt)
+  }
+
+  crushedVolume(): number {
+    let held = 0
+    for (const rock of this.rocks.byCollider.values()) {
+      if (rock.body.translation().y > DISCHARGE_Y) {
+        held += rock.area
+      }
+    }
+    this.crushed = Math.max(this.crushed, this.pourer.pouredArea - held)
+    return this.crushed
   }
 
   free() {

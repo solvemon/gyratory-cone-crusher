@@ -8,6 +8,7 @@ import { Renderer } from './render.ts'
 import { initPhysics, Sim } from './sim.ts'
 import { createGrimeTile, createSteelTile } from './textures.ts'
 import { loadSettings, saveSettings } from './settings.ts'
+import { CrushedTally } from './tally.ts'
 import type { Tool } from './settings.ts'
 import { POUR_FLOW_MAX, POUR_FLOW_MIN, STEP_DT } from './tuning.ts'
 import type { Vec } from './geometry.ts'
@@ -49,6 +50,7 @@ const feedValue = element<HTMLOutputElement>('feed-value')
 const slowLamp = element<HTMLSpanElement>('slow-lamp')
 const slowButton = element<HTMLButtonElement>('slow')
 const resetButton = element<HTMLButtonElement>('reset')
+const crushed = element<HTMLDivElement>('crushed')
 const stats = element<HTMLDivElement>('stats')
 const hint = element<HTMLDivElement>('hint')
 const panel = element<HTMLDivElement>('panel')
@@ -103,6 +105,7 @@ let pendingTime = 0
 let fpsFrames = 0
 let fpsSince = performance.now()
 const pacing = new Pacing()
+const tally = new CrushedTally()
 const simulationTime = new Average()
 const drawTime = new Average()
 
@@ -156,6 +159,7 @@ function reset() {
   sim.free()
   sim = new Sim()
   sim.fracturer.dustSize = dustSizeFor(renderer.frame.scale)
+  tally.startSession()
 }
 
 function showPourFlow() {
@@ -202,6 +206,12 @@ window.addEventListener('keydown', (event) => {
   }
 })
 window.addEventListener('resize', applyLayout)
+window.addEventListener('pagehide', () => tally.save())
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    tally.save()
+  }
+})
 new ResizeObserver(applyLayout).observe(panel)
 
 function simulationSpeed(): number {
@@ -209,6 +219,15 @@ function simulationSpeed(): number {
     return SLOW_MOTION_SPEED
   }
   return 1
+}
+
+const volumeFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+
+function showCrushed(now: number) {
+  tally.record(sim.crushedVolume(), now)
+  const session = volumeFormat.format(tally.session).padStart(13, ' ')
+  const lifetime = volumeFormat.format(tally.lifetime).padStart(12, ' ')
+  crushed.textContent = `SESSION ${session} m³\nLIFETIME ${lifetime} m³`
 }
 
 function updateStats(now: number) {
@@ -261,6 +280,7 @@ function frame(now: number) {
   simulationTime.add(drawStart - simulationStart)
   renderer.draw(sim, sim.pourer.target)
   drawTime.add(performance.now() - drawStart)
+  showCrushed(now)
   updateStats(now)
   requestAnimationFrame(frame)
 }

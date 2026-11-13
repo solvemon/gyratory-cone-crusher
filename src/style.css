@@ -522,8 +522,13 @@ button:focus-visible,
   text-shadow: 0 0 6px rgba(110, 255, 130, 0.5);
 }
 
+#crushed,
 #stats {
   white-space: pre;
+}
+
+#crushed {
+  font-weight: 700;
 }
 
 .lcd .hint {

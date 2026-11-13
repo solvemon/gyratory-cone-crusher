@@ -57,6 +57,7 @@ export class Pourer {
   target: Vec | null = null
   flow = POUR_FLOW_DEFAULT
   budget = 0
+  pouredArea = 0
   pending: Pending | null = null
 
   constructor(world: World, rocks: RockField) {
@@ -126,7 +127,10 @@ export class Pourer {
     const shape = pending.shape.map((p) => ({ x: p.x + center.x, y: p.y + center.y }))
     const motion = { velocity: { x: randomBetween(-0.3, 0.3), y: -2 }, angularVelocity: randomBetween(-1, 1) }
     const texture = { anchor: { x: randomBetween(-50, 50), y: randomBetween(-50, 50) }, angle: randomBetween(0, Math.PI * 2) }
-    this.rocks.add(shape, motion, randomLook(), 0, texture)
+    const rock = this.rocks.add(shape, motion, randomLook(), 0, texture)
+    if (rock) {
+      this.pouredArea += rock.area
+    }
   }
 }
 
