@@ -16,7 +16,6 @@ const MAX_PIXEL_RATIO = 2
 const SPRITE_MARGIN_PIXELS = 4
 const MANTLE_AXIS_LENGTH = 15
 const REBAKE_TURN = 0.35
-const MIN_VISIBLE_LOAD = 0.05
 const ROCK_SHAKE_PIXELS = 2.5
 const TOOL_SHAKE_PIXELS = 3
 const SHAKE_HZ = 22
@@ -155,12 +154,12 @@ export class Renderer {
     return { x: (x - this.frame.originX) / this.frame.scale, y: (this.frame.originY - y) / this.frame.scale }
   }
 
-  draw(sim: Sim, pourTarget: Vec | null, showLoad: boolean) {
+  draw(sim: Sim, pourTarget: Vec | null) {
     const ctx = this.viewContext
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
     this.useWorldTransform()
-    this.drawRocks(sim, showLoad)
+    this.drawRocks(sim)
     this.drawGrains(sim)
     this.drawPuffs(sim)
     this.drawSparks(sim)
@@ -301,7 +300,7 @@ export class Renderer {
     return pattern
   }
 
-  private drawRocks(sim: Sim, showLoad: boolean) {
+  private drawRocks(sim: Sim) {
     const ctx = this.viewContext
     const { scale, originX, originY, dpr } = this.frame
     this.frameNumber++
@@ -321,9 +320,6 @@ export class Renderer {
     }
     this.useWorldTransform()
     this.releaseUnusedRockSprites()
-    if (showLoad) {
-      this.drawLoadGlow(sim)
-    }
   }
 
   private releaseUnusedRockSprites() {
@@ -383,19 +379,6 @@ export class Renderer {
     ctx.stroke(lit)
     this.context = this.viewContext
     return { image: this.bakery.transferToImageBitmap(), angle, scale, dpr, width, height, centerX, centerY, lastDrawn: this.frameNumber }
-  }
-
-  private drawLoadGlow(sim: Sim) {
-    const ctx = this.viewContext
-    for (const rock of sim.rocks.byCollider.values()) {
-      const load = Math.min(1, rock.stress)
-      if (load < MIN_VISIBLE_LOAD) {
-        continue
-      }
-      this.tracePolygon(sim.rocks.worldPolygon(rock))
-      ctx.fillStyle = `hsla(28, 85%, 60%, ${load * 0.85})`
-      ctx.fill()
-    }
   }
 
   private drawGrains(sim: Sim) {

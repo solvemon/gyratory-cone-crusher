@@ -8,7 +8,6 @@ export type Settings = {
   pourFlow: number
   tool: Tool
   slowMotion: boolean
-  loadGlow: boolean
   panelCollapsed: boolean
 }
 
@@ -19,7 +18,6 @@ const DEFAULTS: Settings = {
   pourFlow: POUR_FLOW_DEFAULT,
   tool: 'pour',
   slowMotion: false,
-  loadGlow: false,
   panelCollapsed: false,
 }
 
@@ -46,7 +44,6 @@ export function loadSettings(): Settings {
     pourFlow: storedField(fields, 'pourFlow', isFlow),
     tool: storedField(fields, 'tool', isTool),
     slowMotion: storedField(fields, 'slowMotion', isBoolean),
-    loadGlow: storedField(fields, 'loadGlow', isBoolean),
     panelCollapsed: storedField(fields, 'panelCollapsed', isBoolean),
   }
 }

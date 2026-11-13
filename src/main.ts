@@ -49,7 +49,6 @@ const feedValue = element<HTMLOutputElement>('feed-value')
 const slowLamp = element<HTMLSpanElement>('slow-lamp')
 const slowButton = element<HTMLButtonElement>('slow')
 const resetButton = element<HTMLButtonElement>('reset')
-const loadToggle = element<HTMLInputElement>('load')
 const stats = element<HTMLDivElement>('stats')
 const hint = element<HTMLDivElement>('hint')
 const panel = element<HTMLDivElement>('panel')
@@ -153,12 +152,6 @@ function setSlowMotion(slowMotion: boolean) {
   saveSettings(settings)
 }
 
-function setLoadGlow(loadGlow: boolean) {
-  settings.loadGlow = loadGlow
-  loadToggle.checked = loadGlow
-  saveSettings(settings)
-}
-
 function reset() {
   sim.free()
   sim = new Sim()
@@ -184,14 +177,12 @@ showPourFlow()
 setTool(settings.tool)
 setCrusherRunning(settings.crusherRunning)
 setSlowMotion(settings.slowMotion)
-setLoadGlow(settings.loadGlow)
 setPanelCollapsed(settings.panelCollapsed)
 
 startButton.addEventListener('click', () => setCrusherRunning(true))
 stopButton.addEventListener('click', () => setCrusherRunning(false))
 modeSelector.addEventListener('click', toggleTool)
 slowButton.addEventListener('click', () => setSlowMotion(!settings.slowMotion))
-loadToggle.addEventListener('change', () => setLoadGlow(loadToggle.checked))
 resetButton.addEventListener('click', reset)
 window.addEventListener('keydown', (event) => {
   if (event.key === 's' || event.key === 'S') {
@@ -268,7 +259,7 @@ function frame(now: number) {
   pacing.record(elapsed, steps * STEP_DT)
   const drawStart = performance.now()
   simulationTime.add(drawStart - simulationStart)
-  renderer.draw(sim, sim.pourer.target, settings.loadGlow)
+  renderer.draw(sim, sim.pourer.target)
   drawTime.add(performance.now() - drawStart)
   updateStats(now)
   requestAnimationFrame(frame)
