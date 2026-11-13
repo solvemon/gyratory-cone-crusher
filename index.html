@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Crusher X-ray</title>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div class="panel" id="panel">
+      <div class="hazard" id="panel-hazard"></div>
+      <span class="screw top-left"></span>
+      <span class="screw top-right"></span>
+      <span class="screw bottom-left"></span>
+      <span class="screw bottom-right"></span>
+
+      <div class="nameplate" id="panel-nameplate" title="Drag to move · double-click to dock">Gyratory crusher · X-ray</div>
+
+      <div class="section">
+        <div class="control">
+          <div class="buttons">
+            <span class="lamp green" id="run-lamp"></span>
+            <button class="push green" id="start" aria-label="Start crusher"></button>
+            <button class="push red" id="stop" aria-label="Stop crusher"></button>
+          </div>
+          <span class="legend">Crusher start · stop <kbd>G</kbd></span>
+        </div>
+        <div class="control">
+          <div class="legend selector-legend">
+            <span id="mode-pour">Pour <kbd>1</kbd></span>
+            <span id="mode-breaker">Breaker <kbd>2</kbd></span>
+          </div>
+          <button class="selector" id="mode" aria-label="Tool selector"><span class="selector-handle"></span></button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="control">
+          <div class="dial" id="feed" role="slider" tabindex="0" aria-label="Feed rate">
+            <span class="dial-knob"></span>
+          </div>
+          <span class="legend">Feed <output id="feed-value"></output> m²/s</span>
+        </div>
+        <div class="control">
+          <div class="buttons">
+            <span class="lamp amber" id="slow-lamp"></span>
+            <button class="push black" id="slow" aria-label="Slow motion"></button>
+          </div>
+          <span class="legend">Slow-mo <kbd>S</kbd></span>
+        </div>
+        <div class="control">
+          <button class="push black" id="reset" aria-label="Reset"></button>
+          <span class="legend">Reset <kbd>R</kbd></span>
+        </div>
+        <label class="control toggle">
+          <input type="checkbox" id="load" />
+          <span class="toggle-base"><span class="toggle-lever"></span></span>
+          <span class="legend">Load glow</span>
+        </label>
+      </div>
+
+      <div class="lcd">
+        <div id="stats">&nbsp;</div>
+        <div class="hint" id="hint"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
