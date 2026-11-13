@@ -2,7 +2,7 @@ import { add, length, normalize, perpendicular, rotate, scale, sub } from './geo
 import { BOOM, HAMMER_SHAPE } from './breaker.ts'
 import type { BoomPose } from './breaker.ts'
 import type { Vec } from './geometry.ts'
-import { BELT, MANTLE_PARTS, PIVOT, STATIC_PARTS, VIEW } from './machine.ts'
+import { BELT, ESSENTIAL_VIEW, MANTLE_PARTS, PIVOT, STATIC_PARTS, VIEW } from './machine.ts'
 import type { Rock } from './rocks.ts'
 import type { Sim } from './sim.ts'
 import { createPaintTile, createPuffSprite, createRockTile, createSteelTile } from './textures.ts'
@@ -42,10 +42,20 @@ const COLORS = {
 
 type Frame = { scale: number; originX: number; originY: number; dpr: number }
 
+type Bounds = { left: number; right: number; bottom: number; top: number }
+
+export type ScreenArea = { left: number; top: number; width: number; height: number }
+
+function placeWindow(preferredMin: number, preferredMax: number, essentialMin: number, essentialMax: number, size: number) {
+  const centered = (preferredMin + preferredMax) / 2 - size / 2
+  return Math.min(essentialMin, Math.max(essentialMax - size, centered))
+}
+
 export class Renderer {
   canvas: HTMLCanvasElement
   context: CanvasRenderingContext2D
   frame: Frame = { scale: 1, originX: 0, originY: 0, dpr: 1 }
+  visible: Bounds = VIEW
   rockTexture: CanvasPattern
   steelTexture: CanvasPattern
   paintTexture: CanvasPattern
@@ -62,24 +72,28 @@ export class Renderer {
     this.steelTexture = this.pattern(createSteelTile())
     this.paintTexture = this.pattern(createPaintTile())
     this.puffSprite = createPuffSprite()
-    this.resize()
   }
 
-  resize() {
+  resize(area: ScreenArea) {
     const dpr = window.devicePixelRatio || 1
     const width = this.canvas.clientWidth
     const height = this.canvas.clientHeight
     this.canvas.width = Math.round(width * dpr)
     this.canvas.height = Math.round(height * dpr)
-    const viewWidth = VIEW.right - VIEW.left
-    const viewHeight = VIEW.top - VIEW.bottom
-    const scale = Math.min(width / viewWidth, height / viewHeight)
+    const essentialWidth = ESSENTIAL_VIEW.right - ESSENTIAL_VIEW.left
+    const essentialHeight = ESSENTIAL_VIEW.top - ESSENTIAL_VIEW.bottom
+    const scale = Math.min(area.width / essentialWidth, area.height / essentialHeight)
+    const worldLeft = placeWindow(VIEW.left, VIEW.right, ESSENTIAL_VIEW.left, ESSENTIAL_VIEW.right, area.width / scale)
+    const worldBottom = placeWindow(VIEW.bottom, VIEW.top, ESSENTIAL_VIEW.bottom, ESSENTIAL_VIEW.top, area.height / scale)
     this.frame = {
       scale,
-      originX: width / 2 - ((VIEW.left + VIEW.right) / 2) * scale,
-      originY: height / 2 + ((VIEW.bottom + VIEW.top) / 2) * scale,
+      originX: area.left - worldLeft * scale,
+      originY: area.top + area.height + worldBottom * scale,
       dpr,
     }
+    const topLeft = this.screenToWorld(0, 0)
+    const bottomRight = this.screenToWorld(width, height)
+    this.visible = { left: topLeft.x, right: bottomRight.x, bottom: bottomRight.y, top: topLeft.y }
   }
 
   screenToWorld(x: number, y: number): Vec {
@@ -126,19 +140,20 @@ export class Renderer {
 
   private drawGrid() {
     const ctx = this.context
+    const { left, right, bottom, top } = this.visible
     ctx.lineWidth = this.pixels(1)
-    for (let x = Math.ceil(VIEW.left); x <= VIEW.right; x++) {
+    for (let x = Math.ceil(left); x <= right; x++) {
       ctx.strokeStyle = gridColor(x)
       ctx.beginPath()
-      ctx.moveTo(x, VIEW.bottom)
-      ctx.lineTo(x, VIEW.top)
+      ctx.moveTo(x, bottom)
+      ctx.lineTo(x, top)
       ctx.stroke()
     }
-    for (let y = Math.ceil(VIEW.bottom); y <= VIEW.top; y++) {
+    for (let y = Math.ceil(bottom); y <= top; y++) {
       ctx.strokeStyle = gridColor(y)
       ctx.beginPath()
-      ctx.moveTo(VIEW.left, y)
-      ctx.lineTo(VIEW.right, y)
+      ctx.moveTo(left, y)
+      ctx.lineTo(right, y)
       ctx.stroke()
     }
   }
@@ -405,8 +420,6 @@ export class Renderer {
     ctx.stroke()
   }
 }
-
-type Bounds = { left: number; right: number; bottom: number; top: number }
 
 function boundsOf(poly: Vec[]): Bounds {
   const xs = poly.map((p) => p.x)

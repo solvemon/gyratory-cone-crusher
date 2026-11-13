@@ -1,6 +1,8 @@
 import './style.css'
 import { mountDial } from './dial.ts'
 import { makeDraggable } from './draggable.ts'
+import { dockFor, freeArea } from './layout.ts'
+import type { Dock } from './layout.ts'
 import { Renderer } from './render.ts'
 import { initPhysics, Sim } from './sim.ts'
 import { createGrimeTile, createSteelTile } from './textures.ts'
@@ -49,16 +51,45 @@ const resetButton = element<HTMLButtonElement>('reset')
 const loadToggle = element<HTMLInputElement>('load')
 const stats = element<HTMLDivElement>('stats')
 const hint = element<HTMLDivElement>('hint')
+const panel = element<HTMLDivElement>('panel')
+const nameplate = element<HTMLDivElement>('panel-nameplate')
+const collapseButton = element<HTMLButtonElement>('collapse')
 const renderer = new Renderer(canvas)
-
-makeDraggable(
-  element<HTMLDivElement>('panel'),
-  [element<HTMLDivElement>('panel-nameplate'), element<HTMLDivElement>('panel-hazard')],
-  'crusher-panel-position',
-)
 
 let sim = new Sim()
 const settings = loadSettings()
+let dock: Dock = 'floating'
+
+const refreshPanelPosition = makeDraggable(
+  panel,
+  [nameplate, element<HTMLDivElement>('panel-hazard')],
+  'crusher-panel-position',
+  () => dock === 'floating',
+)
+
+function applyLayout() {
+  const screen = { width: canvas.clientWidth, height: canvas.clientHeight }
+  dock = dockFor(screen.width, screen.height)
+  panel.dataset.dock = dock
+  refreshPanelPosition()
+  renderer.resize(freeArea(dock, screen, panel))
+}
+
+function setPanelCollapsed(collapsed: boolean) {
+  settings.panelCollapsed = collapsed
+  panel.classList.toggle('collapsed', collapsed)
+  collapseButton.setAttribute('aria-expanded', String(!collapsed))
+  collapseButton.setAttribute('aria-label', collapsed ? 'Expand panel' : 'Collapse panel')
+  saveSettings(settings)
+  applyLayout()
+}
+
+nameplate.addEventListener('click', (event) => {
+  const onButton = event.target instanceof Element && event.target.closest('#collapse') !== null
+  if (onButton || dock !== 'floating') {
+    setPanelCollapsed(!settings.panelCollapsed)
+  }
+})
 let pointer: Vec | null = null
 let pressed = false
 let lastFrame = performance.now()
@@ -143,6 +174,7 @@ setTool(settings.tool)
 setCrusherRunning(settings.crusherRunning)
 setSlowMotion(settings.slowMotion)
 setLoadGlow(settings.loadGlow)
+setPanelCollapsed(settings.panelCollapsed)
 
 startButton.addEventListener('click', () => setCrusherRunning(true))
 stopButton.addEventListener('click', () => setCrusherRunning(false))
@@ -167,7 +199,8 @@ window.addEventListener('keydown', (event) => {
     setTool('breaker')
   }
 })
-window.addEventListener('resize', () => renderer.resize())
+window.addEventListener('resize', applyLayout)
+new ResizeObserver(applyLayout).observe(panel)
 
 function simulationSpeed(): number {
   if (settings.slowMotion) {

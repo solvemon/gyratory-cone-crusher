@@ -9,6 +9,7 @@ export type Settings = {
   tool: Tool
   slowMotion: boolean
   loadGlow: boolean
+  panelCollapsed: boolean
 }
 
 const STORAGE_KEY = 'crusher-settings'
@@ -19,6 +20,7 @@ const DEFAULTS: Settings = {
   tool: 'pour',
   slowMotion: false,
   loadGlow: false,
+  panelCollapsed: false,
 }
 
 function storedField<T>(stored: Record<string, unknown>, key: keyof Settings, isValid: (value: unknown) => boolean): T {
@@ -45,6 +47,7 @@ export function loadSettings(): Settings {
     tool: storedField(fields, 'tool', isTool),
     slowMotion: storedField(fields, 'slowMotion', isBoolean),
     loadGlow: storedField(fields, 'loadGlow', isBoolean),
+    panelCollapsed: storedField(fields, 'panelCollapsed', isBoolean),
   }
 }
 

@@ -125,7 +125,8 @@ body {
 }
 
 .nameplate {
-  padding: 5px 10px;
+  position: relative;
+  padding: 5px 30px;
   border-radius: 2px;
   border: 1px solid #0c0e10;
   background: var(--grime), linear-gradient(#2d3135, #1b1e21);
@@ -136,6 +137,107 @@ body {
   font-weight: 700;
   letter-spacing: 0.16em;
   color: #e3dbc4;
+}
+
+.collapse {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  width: 26px;
+  height: 22px;
+  margin-top: -11px;
+  border-radius: 2px;
+  background: linear-gradient(#3a3f44, #222629);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+.collapse::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin: -2px 0 0 -4px;
+  border-left: 2px solid var(--legend);
+  border-top: 2px solid var(--legend);
+  transform: rotate(45deg);
+  transition: transform 0.15s, margin 0.15s;
+}
+
+.panel.collapsed .collapse::before {
+  margin-top: -6px;
+  transform: rotate(225deg);
+}
+
+.panel.collapsed {
+  padding-bottom: 10px;
+}
+
+.panel.collapsed .section,
+.panel.collapsed .lcd {
+  display: none;
+}
+
+.panel[data-dock='bottom'] {
+  top: auto;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: none;
+  padding: 18px 14px calc(10px + env(safe-area-inset-bottom));
+  border-radius: 6px 6px 0 0;
+}
+
+.panel[data-dock='bottom'] .collapse::before {
+  margin-top: -6px;
+  transform: rotate(225deg);
+}
+
+.panel[data-dock='bottom'].collapsed .collapse::before {
+  margin-top: -2px;
+  transform: rotate(45deg);
+}
+
+.panel[data-dock='bottom'] .section {
+  justify-content: space-around;
+  margin-top: 10px;
+}
+
+.panel[data-dock='bottom'] .lcd {
+  margin-top: 10px;
+}
+
+.panel[data-dock='left'] {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: calc(316px + env(safe-area-inset-left));
+  max-width: 60vw;
+  padding-left: calc(18px + env(safe-area-inset-left));
+  border-radius: 0 6px 6px 0;
+  overflow-y: auto;
+}
+
+.panel[data-dock='left'].collapsed {
+  bottom: auto;
+  border-radius: 0 0 6px 0;
+}
+
+.panel[data-dock='bottom'] .nameplate,
+.panel[data-dock='bottom'] .hazard,
+.panel[data-dock='left'] .nameplate,
+.panel[data-dock='left'] .hazard {
+  cursor: pointer;
+}
+
+@media (hover: none) {
+  kbd {
+    display: none;
+  }
 }
 
 .section {

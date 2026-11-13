@@ -7,6 +7,7 @@ export const PIVOT: Vec = { x: 0, y: 16 }
 export const MANTLE_BOTTOM_Y = 1.6
 export const BELT = { left: -9.5, right: 15, top: -3.6, thickness: 0.6 }
 export const VIEW = { left: -10.5, right: 14, bottom: -4.8, top: 22 }
+export const ESSENTIAL_VIEW = { left: -9.3, right: 9.3, bottom: -4.8, top: 22 }
 
 const AMPLITUDE = MANTLE_THROW_AT_BOTTOM / (PIVOT.y - MANTLE_BOTTOM_Y)
 

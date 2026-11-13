@@ -20,7 +20,11 @@ function load(key: string): Position {
   return HOME
 }
 
-export function makeDraggable(panel: HTMLElement, handles: HTMLElement[], storageKey: string) {
+function startsOnButton(event: PointerEvent): boolean {
+  return event.target instanceof Element && event.target.closest('button') !== null
+}
+
+export function makeDraggable(panel: HTMLElement, handles: HTMLElement[], storageKey: string, isFloating: () => boolean) {
   let position = load(storageKey)
   let grab: Position | null = null
 
@@ -34,6 +38,9 @@ export function makeDraggable(panel: HTMLElement, handles: HTMLElement[], storag
 
   for (const handle of handles) {
     handle.addEventListener('pointerdown', (event) => {
+      if (!isFloating() || startsOnButton(event)) {
+        return
+      }
       handle.setPointerCapture(event.pointerId)
       grab = { x: event.clientX - position.x, y: event.clientY - position.y }
       panel.classList.add('dragging')
@@ -45,17 +52,29 @@ export function makeDraggable(panel: HTMLElement, handles: HTMLElement[], storag
     })
     for (const type of ['pointerup', 'pointercancel'] as const) {
       handle.addEventListener(type, () => {
+        if (!grab) {
+          return
+        }
         grab = null
         panel.classList.remove('dragging')
         writeStored(storageKey, position)
       })
     }
     handle.addEventListener('dblclick', () => {
+      if (!isFloating()) {
+        return
+      }
       place(HOME)
       writeStored(storageKey, position)
     })
   }
 
-  window.addEventListener('resize', () => place(position))
-  place(position)
+  return function refresh() {
+    if (isFloating()) {
+      place(position)
+      return
+    }
+    panel.style.left = ''
+    panel.style.top = ''
+  }
 }
