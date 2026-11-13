@@ -39,7 +39,7 @@ export const DUST_SIZE = 0.16
 export const MAX_ROCKS = 1200
 export const POUR_FLOW_DEFAULT = 3.5
 export const POUR_FLOW_MIN = 1
-export const POUR_FLOW_MAX = 10
+export const POUR_FLOW_MAX = 20
 
 export const BELT_SPEED = 2.2
 export const STEEL_SPARK_CHANCE = 0.3

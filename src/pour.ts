@@ -15,7 +15,7 @@ const GRADES: Grade[] = [
 
 const POUR_ZONE = { left: -6.8, right: 6.8, bottom: 14.8, top: 21.6 }
 const MAX_BUDGET = 4
-const PLACEMENT_TRIES = 6
+const PLACEMENT_TRIES = 12
 
 function pickGrade(): Grade {
   let roll = Math.random()
