@@ -22,7 +22,7 @@ export const BOOM = {
   shoulder: { x: 10.6, y: 16.2 },
   mainBoomLength: 5,
   sleeveLength: 4,
-  maxReach: 16.8,
+  maxReach: 14.8,
   elbowLift: 2.5,
   park: { x: 7.0, y: 19.4 },
 }
