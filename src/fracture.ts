@@ -38,7 +38,7 @@ import {
 } from './tuning.ts'
 
 type Contact = { point: Vec; inward: Vec; force: number; penetration: number; steel: boolean }
-type Squeeze = { a: Contact; b: Contact; force: number; penetration: number; steel: boolean }
+type Squeeze = { a: Contact; b: Contact; force: number; steel: boolean }
 
 export type FractureCounters = { cracks: number; chips: number; jams: number }
 
@@ -113,14 +113,22 @@ function strongestSqueeze(contacts: Contact[]): Squeeze | null {
         continue
       }
       const force = Math.min(a.force, b.force) * opposition
-      const penetration = Math.min(a.penetration, b.penetration)
-      const isStronger = !best || force > best.force || penetration > best.penetration
-      if (isStronger) {
-        best = { a, b, force, penetration, steel: a.steel || b.steel }
+      if (!best || force > best.force) {
+        best = { a, b, force, steel: a.steel || b.steel }
       }
     }
   }
   return best
+}
+
+function deepestSteelPenetration(contacts: Contact[]): number {
+  let deepest = 0
+  for (const contact of contacts) {
+    if (contact.steel) {
+      deepest = Math.max(deepest, contact.penetration)
+    }
+  }
+  return deepest
 }
 
 function strongestContact(contacts: Contact[]): Contact | null {
@@ -187,16 +195,17 @@ export class Fracturer {
     }
     rock.stress = blend(rock.stress, squeezeForce / rock.strength, dt)
     rock.chipLoad = blend(rock.chipLoad, hardestForce / rock.strength, dt)
+    rock.steelDepth = blend(rock.steelDepth, deepestSteelPenetration(contacts), dt)
     if (rock.stress > FATIGUE_ONSET) {
       rock.damage = Math.min(1, rock.damage + (rock.stress - FATIGUE_ONSET) * FATIGUE_RATE * dt)
     }
     const weakening = 1 - FATIGUE_WEAKENING * rock.damage
 
-    const pressedIntoSteel = contacts.some((c) => c.steel && c.penetration > rock.size * EMBED_FRACTION)
-    if (pressedIntoSteel) {
+    const embeddedInSteel = rock.steelDepth > rock.thickness * EMBED_FRACTION
+    if (embeddedInSteel) {
       return () => this.pulverize(rock)
     }
-    const jammedAgainstSteel = squeeze && squeeze.steel && squeeze.penetration > JAM_DEPTH
+    const jammedAgainstSteel = rock.steelDepth > JAM_DEPTH
     if (squeeze && jammedAgainstSteel) {
       this.counters.jams++
       return () => this.crack(rock, squeeze) || this.pulverizeIfSmall(rock)
@@ -275,7 +284,7 @@ export class Fracturer {
   }
 
   private pulverizeIfSmall(rock: Rock): boolean {
-    if (rock.size > PULVERIZE_SIZE) {
+    if (rock.thickness > PULVERIZE_SIZE) {
       return false
     }
     return this.pulverize(rock)

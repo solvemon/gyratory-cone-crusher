@@ -90,6 +90,7 @@ export class Sim {
       if (!rock.evaluated) {
         rock.stress *= fade
         rock.chipLoad *= fade
+        rock.steelDepth *= fade
       }
       rock.evaluated = false
       rock.chipCooldown -= dt

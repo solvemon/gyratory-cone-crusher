@@ -19,10 +19,12 @@ export type Rock = {
   local: Vec[]
   size: number
   area: number
+  thickness: number
   strength: number
   damage: number
   stress: number
   chipLoad: number
+  steelDepth: number
   evaluated: boolean
   chipCooldown: number
   look: RockLook
@@ -61,6 +63,7 @@ export class RockField {
       return null
     }
     const size = maxExtent(local)
+    const area = polygonArea(local)
     const strength = strengthFor(size)
     const body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
@@ -80,11 +83,13 @@ export class RockField {
       collider,
       local,
       size,
-      area: polygonArea(local),
+      area,
+      thickness: Math.min(size, (2 * area) / size),
       strength,
       damage,
       stress: 0,
       chipLoad: 0,
+      steelDepth: 0,
       evaluated: false,
       chipCooldown: 0,
       look,
