@@ -382,7 +382,7 @@ export class Fracturer {
       }
       const kick = scale(normalize(sub(center, parentCenter)), 0.3)
       motion.velocity = add(motion.velocity, kick)
-      const fragment = this.rocks.add(piece, motion, rock.look, damage, texture)
+      const fragment = this.rocks.add(piece, motion, rock.look, damage, texture, rock.skin)
       if (fragment) {
         fragment.chipCooldown = CHIP_COOLDOWN
       }

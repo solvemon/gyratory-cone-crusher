@@ -1,8 +1,9 @@
 import RAPIER from '@dimforge/rapier2d-compat'
 import type { World } from '@dimforge/rapier2d-compat'
-import { convexHull, polygonArea, randomBetween, rotate } from './geometry.ts'
+import { add, convexHull, polygonArea, randomBetween, rotate } from './geometry.ts'
 import type { Vec } from './geometry.ts'
 import type { RockField, RockLook } from './rocks.ts'
+import type { Skin } from './skins.ts'
 import { MAX_ROCKS, POUR_FLOW_DEFAULT } from './tuning.ts'
 
 type Grade = { minSize: number; maxSize: number; areaShare: number; corners: [number, number] }
@@ -16,6 +17,8 @@ const GRADES: Grade[] = [
 const POUR_ZONE = { left: -6.8, right: 6.8, bottom: 16.6, top: 21.6 }
 const MAX_BUDGET = 4
 const PLACEMENT_TRIES = 12
+const THROW_SPREAD = 3.5
+const THROW_TILT = 0.5
 
 function pickGrade(): Grade {
   let roll = Math.random()
@@ -49,6 +52,8 @@ export function randomRockShape(size: number, corners: [number, number]): Vec[] 
   return convexHull(points)
 }
 
+type Throw = { skin: Skin; x: number | null }
+
 type Pending = { shape: Vec[]; size: number }
 
 export class Pourer {
@@ -59,13 +64,19 @@ export class Pourer {
   budget = 0
   pouredArea = 0
   pending: Pending | null = null
+  private throws: Throw[] = []
 
   constructor(world: World, rocks: RockField) {
     this.world = world
     this.rocks = rocks
   }
 
+  throwIn(skin: Skin, x: number | null = null) {
+    this.throws.push({ skin, x })
+  }
+
   update(dt: number) {
+    this.placeThrow()
     if (!this.target) {
       this.budget = 0
       return
@@ -117,6 +128,45 @@ export class Pourer {
   private hasOpenSky(center: Vec): boolean {
     const upward = new RAPIER.Ray(center, { x: 0, y: 1 })
     return this.world.castRay(upward, POUR_ZONE.top + 2 - center.y, true) === null
+  }
+
+  private placeThrow() {
+    const next = this.throws[0]
+    if (!next || this.rocks.count >= MAX_ROCKS) {
+      return
+    }
+    const { width, height } = next.skin
+    for (let attempt = 0; attempt < PLACEMENT_TRIES; attempt++) {
+      const center = { x: this.throwX(next.x), y: POUR_ZONE.top - height / 2 }
+      if (this.isFree(center, Math.hypot(width, height)) && this.hasOpenSky(center)) {
+        this.spawnSlab(next.skin, center)
+        this.throws.shift()
+        return
+      }
+    }
+  }
+
+  private throwX(wanted: number | null): number {
+    if (wanted === null) {
+      return randomBetween(-THROW_SPREAD, THROW_SPREAD)
+    }
+    return clamp(wanted + randomBetween(-0.5, 0.5), -THROW_SPREAD, THROW_SPREAD)
+  }
+
+  private spawnSlab(skin: Skin, center: Vec) {
+    const tilt = randomBetween(-THROW_TILT, THROW_TILT)
+    const corners = [
+      { x: -skin.width / 2, y: skin.height / 2 },
+      { x: skin.width / 2, y: skin.height / 2 },
+      { x: skin.width / 2, y: -skin.height / 2 },
+      { x: -skin.width / 2, y: -skin.height / 2 },
+    ].map((corner) => add(rotate(corner, tilt), center))
+    const motion = { velocity: { x: randomBetween(-1, 1), y: -3 }, angularVelocity: randomBetween(-1.5, 1.5) }
+    const texture = { anchor: corners[0], angle: tilt }
+    const rock = this.rocks.add(corners, motion, randomLook(), 0, texture, skin)
+    if (rock) {
+      this.pouredArea += rock.area
+    }
   }
 
   private isFree(center: Vec, size: number): boolean {

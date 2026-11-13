@@ -7,6 +7,7 @@ import { TRUCK } from './trucks.ts'
 import type { Truck } from './trucks.ts'
 import type { Rock, RockField } from './rocks.ts'
 import type { Sim } from './sim.ts'
+import type { Skin } from './skins.ts'
 import { createPaintTile, createPuffSprite, createRockTile, createSteelTile } from './textures.ts'
 
 const ROCK_TEXTURE_METERS_PER_PIXEL = 1.6 / 256
@@ -44,6 +45,7 @@ const LOAD_LEFT = -3.45
 const LOAD_RIGHT = 3.25
 const LOAD_PEAK_X = -0.2
 const TIRE_LUGS = 22
+const SKIN_GRIT = 0.3
 const SAND_MIN_PIXELS = 1.6
 const SAND_COLORS = ['rgb(190, 174, 152)', 'rgb(152, 138, 120)', 'rgb(116, 104, 90)']
 const TIRE_SQUISH = 0.12
@@ -161,6 +163,7 @@ export class Renderer {
   private truckWheel: Sprite | null = null
   private toolsSignature = ''
   private rockSprites = new Map<Rock, RockSprite>()
+  private skinPatterns = new WeakMap<Skin, CanvasPattern>()
   private frameNumber = 0
   private bakery = new OffscreenCanvas(1, 1)
 
@@ -669,14 +672,20 @@ export class Renderer {
     ctx.setTransform(scale * dpr, 0, 0, -scale * dpr, centerX * dpr, centerY * dpr)
     this.context = ctx
     this.tracePolygon(polygon)
-    ctx.fillStyle = rockColor(rock)
-    ctx.fill()
     const texture = rocks.textureFrame(rock)
-    const anchor = sub(texture.anchor, rock.body.translation())
-    this.rockTexture.setTransform(placementMatrix({ anchor, angle: texture.angle }, ROCK_TEXTURE_METERS_PER_PIXEL))
+    const placement = { anchor: sub(texture.anchor, rock.body.translation()), angle: texture.angle }
+    if (rock.skin) {
+      this.paintSkin(ctx, rock.skin, placement)
+    } else {
+      ctx.fillStyle = rockColor(rock)
+      ctx.fill()
+    }
+    this.rockTexture.setTransform(placementMatrix(placement, ROCK_TEXTURE_METERS_PER_PIXEL))
     ctx.globalCompositeOperation = 'overlay'
+    ctx.globalAlpha = rock.skin ? SKIN_GRIT : 1
     ctx.fillStyle = this.rockTexture
     ctx.fill()
+    ctx.globalAlpha = 1
     ctx.globalCompositeOperation = 'source-over'
     const lit = new Path2D()
     const shaded = new Path2D()
@@ -693,6 +702,28 @@ export class Renderer {
     ctx.stroke(lit)
     this.context = this.viewContext
     return { image: this.bakery.transferToImageBitmap(), angle, scale, dpr, width, height, centerX, centerY, lastDrawn: this.frameNumber }
+  }
+
+  private paintSkin(ctx: Context2D, skin: Skin, placement: Placement) {
+    ctx.fillStyle = skin.base
+    ctx.fill()
+    const pattern = this.skinPattern(skin)
+    pattern.setTransform(imageMatrix(placement, skin.width / skin.source.width))
+    ctx.fillStyle = pattern
+    ctx.fill()
+  }
+
+  private skinPattern(skin: Skin): CanvasPattern {
+    const cached = this.skinPatterns.get(skin)
+    if (cached) {
+      return cached
+    }
+    const pattern = this.viewContext.createPattern(skin.source, 'no-repeat')
+    if (!pattern) {
+      throw new Error('Could not create picture pattern')
+    }
+    this.skinPatterns.set(skin, pattern)
+    return pattern
   }
 
   private drawSand(sim: Sim) {
@@ -952,6 +983,12 @@ function counterClockwise(poly: Vec[]): Vec[] {
     return [...poly].reverse()
   }
   return poly
+}
+
+function imageMatrix(placement: Placement, metersPerPixel: number): DOMMatrix {
+  const cos = Math.cos(placement.angle) * metersPerPixel
+  const sin = Math.sin(placement.angle) * metersPerPixel
+  return new DOMMatrix([cos, sin, sin, -cos, placement.anchor.x, placement.anchor.y])
 }
 
 function placementMatrix(placement: Placement, metersPerPixel: number): DOMMatrix {

@@ -2,6 +2,7 @@ import RAPIER from '@dimforge/rapier2d-compat'
 import type { Collider, RigidBody, World } from '@dimforge/rapier2d-compat'
 import { add, convexHull, maxExtent, polygonArea, polygonCentroid, rotate, sub } from './geometry.ts'
 import type { Vec } from './geometry.ts'
+import type { Skin } from './skins.ts'
 import {
   CANDIDATE_RATIO,
   ROCK_DENSITY,
@@ -31,6 +32,7 @@ export type Rock = {
   evaluated: boolean
   chipCooldown: number
   look: RockLook
+  skin: Skin | null
   textureOffset: Vec
   textureAngle: number
 }
@@ -54,7 +56,7 @@ export class RockField {
     return this.byCollider.size
   }
 
-  add(worldPolygon: Vec[], motion: Motion, look: RockLook, damage: number, texture: TextureFrame): Rock | null {
+  add(worldPolygon: Vec[], motion: Motion, look: RockLook, damage: number, texture: TextureFrame, skin: Skin | null = null): Rock | null {
     const hull = convexHull(worldPolygon)
     if (hull.length < 3) {
       return null
@@ -100,6 +102,7 @@ export class RockField {
       evaluated: false,
       chipCooldown: 0,
       look,
+      skin,
       textureOffset: sub(texture.anchor, center),
       textureAngle: texture.angle,
     }

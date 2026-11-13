@@ -9,6 +9,8 @@ import { initPhysics, Sim } from './sim.ts'
 import { createGrimeTile, createSteelTile } from './textures.ts'
 import { loadSettings, saveSettings } from './settings.ts'
 import { CrushedTally } from './tally.ts'
+import { problemSheet, skinFromImage } from './skins.ts'
+import { forgetProblem, loadOwnProblems, PRESET_PROBLEMS, rememberProblem } from './problems.ts'
 import type { Tool } from './settings.ts'
 import { POUR_FLOW_MAX, POUR_FLOW_MIN, STEP_DT } from './tuning.ts'
 import type { Vec } from './geometry.ts'
@@ -51,6 +53,13 @@ const dispatchSelector = element<HTMLButtonElement>('dispatch')
 const manualDispatchLegend = element<HTMLSpanElement>('dispatch-manual')
 const autoDispatchLegend = element<HTMLSpanElement>('dispatch-auto')
 const truckLamp = element<HTMLSpanElement>('truck-lamp')
+const solver = element<HTMLDivElement>('solver')
+const solverToggle = element<HTMLButtonElement>('solver-toggle')
+const problemList = element<HTMLDivElement>('problems')
+const problemForm = element<HTMLFormElement>('problem-form')
+const problemText = element<HTMLInputElement>('problem-text')
+const picturePick = element<HTMLButtonElement>('picture-pick')
+const pictureFile = element<HTMLInputElement>('picture-file')
 const feedDial = element<HTMLDivElement>('feed')
 const feedValue = element<HTMLOutputElement>('feed-value')
 const slowLamp = element<HTMLSpanElement>('slow-lamp')
@@ -156,6 +165,38 @@ function setTool(tool: Tool) {
   saveSettings(settings)
 }
 
+function setSolverOpen(open: boolean) {
+  settings.solverOpen = open
+  solver.classList.toggle('closed', !open)
+  solverToggle.setAttribute('aria-expanded', String(open))
+  saveSettings(settings)
+}
+
+function crushProblem(text: string) {
+  const problem = text.trim()
+  if (problem) {
+    sim.pourer.throwIn(problemSheet(problem))
+  }
+}
+
+async function crushPicture(file: File, x: number | null) {
+  if (!file.type.startsWith('image/')) {
+    return
+  }
+  try {
+    const bitmap = await createImageBitmap(file)
+    sim.pourer.throwIn(skinFromImage(bitmap), x)
+    bitmap.close()
+  } catch {
+    hint.textContent = 'That picture could not be read'
+  }
+}
+
+function firstImage(files: FileList | null | undefined): File | null {
+  const images = Array.from(files ?? []).filter((file) => file.type.startsWith('image/'))
+  return images[0] ?? null
+}
+
 function setAutoDispatch(auto: boolean) {
   settings.autoDispatch = auto
   dispatchSelector.classList.toggle('turned', auto)
@@ -225,6 +266,81 @@ setCrusherRunning(settings.crusherRunning)
 setSlowMotion(settings.slowMotion)
 setPanelCollapsed(settings.panelCollapsed)
 setAutoDispatch(settings.autoDispatch)
+setSolverOpen(settings.solverOpen)
+
+let ownProblems = loadOwnProblems()
+
+function problemKey(problem: string): HTMLButtonElement {
+  const key = document.createElement('button')
+  key.type = 'button'
+  key.className = 'key'
+  key.textContent = problem
+  key.addEventListener('click', () => crushProblem(problem))
+  return key
+}
+
+function ownProblemKey(problem: string): HTMLSpanElement {
+  const group = document.createElement('span')
+  group.className = 'key-group'
+  const key = problemKey(problem)
+  key.classList.add('own')
+  const remove = document.createElement('button')
+  remove.type = 'button'
+  remove.className = 'key own remove'
+  remove.textContent = '×'
+  remove.setAttribute('aria-label', `Forget ${problem}`)
+  remove.addEventListener('click', () => {
+    ownProblems = forgetProblem(ownProblems, problem)
+    showProblemKeys()
+  })
+  group.append(key, remove)
+  return group
+}
+
+function showProblemKeys() {
+  problemList.replaceChildren(...PRESET_PROBLEMS.map(problemKey), ...ownProblems.map(ownProblemKey))
+}
+
+showProblemKeys()
+solverToggle.addEventListener('click', () => setSolverOpen(!settings.solverOpen))
+problemForm.addEventListener('submit', (event) => {
+  event.preventDefault()
+  const problem = problemText.value.trim()
+  problemText.value = ''
+  if (!problem) {
+    return
+  }
+  crushProblem(problem)
+  ownProblems = rememberProblem(ownProblems, problem)
+  showProblemKeys()
+})
+picturePick.addEventListener('click', () => pictureFile.click())
+pictureFile.addEventListener('change', () => {
+  const file = firstImage(pictureFile.files)
+  if (file) {
+    crushPicture(file, null)
+  }
+  pictureFile.value = ''
+})
+window.addEventListener('dragover', (event) => {
+  event.preventDefault()
+})
+window.addEventListener('drop', (event) => {
+  event.preventDefault()
+  const file = firstImage(event.dataTransfer?.files)
+  if (!file) {
+    return
+  }
+  const bounds = canvas.getBoundingClientRect()
+  const dropped = renderer.screenToWorld(event.clientX - bounds.left, event.clientY - bounds.top)
+  crushPicture(file, dropped.x)
+})
+window.addEventListener('paste', (event) => {
+  const file = firstImage(event.clipboardData?.files)
+  if (file) {
+    crushPicture(file, null)
+  }
+})
 
 startButton.addEventListener('click', () => setCrusherRunning(true))
 stopButton.addEventListener('click', () => setCrusherRunning(false))
@@ -233,6 +349,9 @@ dispatchSelector.addEventListener('click', () => setAutoDispatch(!settings.autoD
 slowButton.addEventListener('click', () => setSlowMotion(!settings.slowMotion))
 resetButton.addEventListener('click', reset)
 window.addEventListener('keydown', (event) => {
+  if (event.target instanceof HTMLInputElement) {
+    return
+  }
   if (event.key === 's' || event.key === 'S') {
     setSlowMotion(!settings.slowMotion)
   }

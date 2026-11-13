@@ -82,6 +82,25 @@
 &nbsp;</div>
         <div class="hint" id="hint"></div>
       </div>
+
+      <div class="solver" id="solver">
+        <button class="solver-header" id="solver-toggle" type="button" aria-expanded="true">
+          <span>Problem solver</span>
+          <span class="solver-chevron"></span>
+        </button>
+        <div class="solver-body">
+          <div class="problems" id="problems"></div>
+          <form class="problem-entry" id="problem-form">
+            <input id="problem-text" type="text" maxlength="40" placeholder="Type your own problem" autocomplete="off" />
+            <button class="key red" type="submit">Crush</button>
+          </form>
+          <div class="picture-row">
+            <button class="key" id="picture-pick" type="button">Picture…</button>
+            <span class="legend dim">or drop one on the crusher</span>
+            <input type="file" id="picture-file" accept="image/*" hidden />
+          </div>
+        </div>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
