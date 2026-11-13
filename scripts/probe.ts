@@ -59,7 +59,7 @@ for (let i = 0; i < seconds / STEP_DT; i++) {
     const damaged = all.filter((r) => r.damage > 0.2).length
     console.log(
       `t=${t.toFixed(0).padStart(3)} n=${all.length} cracks=${sim.fracturer.counters.cracks} jams=${sim.fracturer.counters.jams} chips=${sim.fracturer.counters.chips} ` +
-        `dmg=${damaged} emb=${embedded} ms=${(stepMs / steps).toFixed(1)}(p${(physMs / steps).toFixed(1)} f${(fracMs / steps).toFixed(1)}) dust=${sim.effects.grains.length} belt=${reachedBelt > 0} | ${buckets.slice(0, 4).join(' ')}`,
+        `dmg=${damaged} emb=${embedded} ms=${(stepMs / steps).toFixed(1)}(p${(physMs / steps).toFixed(1)} f${(fracMs / steps).toFixed(1)}) dust=${sim.effects.sand.count} out=${reachedBelt > 0} | ${buckets.slice(0, 4).join(' ')}`,
     )
     stepMs = 0
     physMs = 0

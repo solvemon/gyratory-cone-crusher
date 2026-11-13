@@ -1,7 +1,7 @@
 import './style.css'
 import { mountDial } from './dial.ts'
 import { makeDraggable } from './draggable.ts'
-import { dockFor, dustSizeFor, freeArea } from './layout.ts'
+import { dockFor, dustSizeFor, freeArea, sandDetailFor } from './layout.ts'
 import { Average, Pacing } from './pacing.ts'
 import type { Dock } from './layout.ts'
 import { Renderer } from './render.ts'
@@ -17,6 +17,8 @@ const TOOL_HINTS: Record<Tool, string> = {
   pour: 'Hold to pour rocks into the hopper',
   breaker: 'Move to steer the breaker · hold to hammer',
 }
+
+const TRUCK_FULL_HINT = 'Truck full · tap it to send it off'
 
 const SLOW_MOTION_SPEED = 0.2
 const MAX_STEPS_PER_FRAME = 4
@@ -74,13 +76,18 @@ const refreshPanelPosition = makeDraggable(
   () => dock === 'floating',
 )
 
+function matchDetailToScreen() {
+  sim.fracturer.dustSize = dustSizeFor(renderer.frame.scale)
+  sim.effects.sand.detail = sandDetailFor(renderer.frame.scale)
+}
+
 function applyLayout() {
   const screen = { width: canvas.clientWidth, height: canvas.clientHeight }
   dock = dockFor(screen.width, screen.height)
   panel.dataset.dock = dock
   refreshPanelPosition()
   renderer.resize(freeArea(dock, screen, panel))
-  sim.fracturer.dustSize = dustSizeFor(renderer.frame.scale)
+  matchDetailToScreen()
 }
 
 function setPanelCollapsed(collapsed: boolean) {
@@ -114,12 +121,22 @@ function trackPointer(event: PointerEvent) {
   pointer = renderer.screenToWorld(event.clientX - bounds.left, event.clientY - bounds.top)
 }
 
+function overParkedTruck(): boolean {
+  return pointer !== null && sim.trucks.parkedAt(pointer) !== null
+}
+
 canvas.addEventListener('pointerdown', (event) => {
-  canvas.setPointerCapture(event.pointerId)
   trackPointer(event)
+  if (pointer && sim.trucks.dispatch(pointer)) {
+    return
+  }
+  canvas.setPointerCapture(event.pointerId)
   pressed = true
 })
-canvas.addEventListener('pointermove', trackPointer)
+canvas.addEventListener('pointermove', (event) => {
+  trackPointer(event)
+  canvas.classList.toggle('over-truck', !pressed && overParkedTruck())
+})
 for (const type of ['pointerup', 'pointercancel'] as const) {
   canvas.addEventListener(type, () => {
     pressed = false
@@ -131,8 +148,17 @@ function setTool(tool: Tool) {
   modeSelector.classList.toggle('breaker', tool === 'breaker')
   pourModeLegend.classList.toggle('active', tool === 'pour')
   breakerModeLegend.classList.toggle('active', tool === 'breaker')
-  hint.textContent = TOOL_HINTS[tool]
+  showHint()
   saveSettings(settings)
+}
+
+function showHint() {
+  const docked = sim.trucks.docked
+  if (docked && docked.full) {
+    hint.textContent = TRUCK_FULL_HINT
+    return
+  }
+  hint.textContent = TOOL_HINTS[settings.tool]
 }
 
 function toggleTool() {
@@ -158,7 +184,7 @@ function setSlowMotion(slowMotion: boolean) {
 function reset() {
   sim.free()
   sim = new Sim()
-  sim.fracturer.dustSize = dustSizeFor(renderer.frame.scale)
+  matchDetailToScreen()
   tally.startSession()
 }
 
@@ -241,6 +267,7 @@ function updateStats(now: number) {
   const simulationMs = simulationTime.value.toFixed(1).padStart(4, ' ')
   const drawMs = drawTime.value.toFixed(1).padStart(4, ' ')
   stats.textContent = `ROCKS ${rocks}   FPS ${fps}\nSIM ${simulationMs} ms  DRAW ${drawMs} ms`
+  showHint()
   fpsFrames = 0
   fpsSince = now
 }

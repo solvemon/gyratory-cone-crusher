@@ -41,7 +41,25 @@ export const POUR_FLOW_DEFAULT = 3.5
 export const POUR_FLOW_MIN = 1
 export const POUR_FLOW_MAX = 20
 
-export const BELT_SPEED = 2.2
+export const TRUCK_CAPACITY = 100
+export const TRUCK_EMPTY_TONNES = 80
+export const TRUCK_PAYLOAD_TONNES = 160
+export const TRUCK_POWER_KW = 1000
+export const TRUCK_RIMPULL_KN = 110
+export const TRUCK_ROLLING_RESISTANCE = 0.2
+export const TRUCK_TORQUE_RESPONSE = 1.4
+export const TRUCK_BRAKE_RESPONSE = 0.5
+export const TRUCK_CRUISE_SPEED = 6
+export const TRUCK_TOP_SPEED = 9
+export const TRUCK_BRAKING = 0.7
+export const TRUCK_FOLLOW_GAP = 14
+export const TRUCK_SPAWN_X = -45
+export const TRUCK_DESPAWN_X = 70
+export const TRUCK_PITCH_PER_ACCELERATION = 0.035
+export const TRUCK_SUSPENSION_HZ = 0.9
+export const TRUCK_SUSPENSION_DAMPING = 0.35
+export const TRUCK_SAG = 0.18
+export const TRUCK_EXHAUST_PUFFS_PER_SECOND = 3
 export const STEEL_SPARK_CHANCE = 0.3
 
 export const BREAKER_RESPONSE = 4

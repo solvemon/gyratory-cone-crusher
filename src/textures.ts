@@ -270,13 +270,13 @@ export function createGrimeTile(): HTMLCanvasElement {
   return canvas
 }
 
-export function createPuffSprite(): HTMLCanvasElement {
+export function createPuffSprite(color = '206, 190, 166'): HTMLCanvasElement {
   const size = 64
   const [canvas, context] = newTile(size)
   const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-  gradient.addColorStop(0, 'rgba(206, 190, 166, 1)')
-  gradient.addColorStop(0.5, 'rgba(206, 190, 166, 0.45)')
-  gradient.addColorStop(1, 'rgba(206, 190, 166, 0)')
+  gradient.addColorStop(0, `rgba(${color}, 1)`)
+  gradient.addColorStop(0.5, `rgba(${color}, 0.45)`)
+  gradient.addColorStop(1, `rgba(${color}, 0)`)
   context.fillStyle = gradient
   context.fillRect(0, 0, size, size)
   return canvas

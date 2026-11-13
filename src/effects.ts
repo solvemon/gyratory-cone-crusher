@@ -1,14 +1,13 @@
 import type { Vec } from './geometry.ts'
 import { randomBetween } from './geometry.ts'
+import { SandField } from './sand.ts'
 
-export type Grain = { x: number; y: number; vx: number; vy: number; age: number; life: number; size: number }
 export type Puff = { x: number; y: number; vx: number; vy: number; radius: number; age: number; life: number }
 export type Spark = { x: number; y: number; vx: number; vy: number; age: number; life: number }
 
-const MAX_GRAINS = 5000
 const MAX_PUFFS = 60
+const MAX_FUMES = 40
 const MAX_SPARKS = 200
-const GRAINS_PER_SQUARE_METER = 900
 
 function advance<T extends { age: number; life: number }>(items: T[], dt: number, move: (item: T) => void): T[] {
   for (const item of items) {
@@ -19,23 +18,13 @@ function advance<T extends { age: number; life: number }>(items: T[], dt: number
 }
 
 export class Effects {
-  grains: Grain[] = []
+  sand = new SandField()
   puffs: Puff[] = []
   sparks: Spark[] = []
+  fumes: Puff[] = []
 
-  dust(at: Vec, area: number, velocity: Vec, spread: number) {
-    const count = Math.min(60, Math.max(3, Math.round(area * GRAINS_PER_SQUARE_METER)))
-    for (let i = 0; i < count && this.grains.length < MAX_GRAINS; i++) {
-      this.grains.push({
-        x: at.x + randomBetween(-spread, spread),
-        y: at.y + randomBetween(-spread, spread),
-        vx: velocity.x + randomBetween(-1.2, 1.2),
-        vy: velocity.y + randomBetween(-0.6, 1.4),
-        age: 0,
-        life: randomBetween(0.8, 2.2),
-        size: randomBetween(0.015, 0.05),
-      })
-    }
+  dust(at: Vec, area: number, velocity: Vec, spread: number, volume = 0) {
+    this.sand.spawn(at, area, velocity, spread, volume)
   }
 
   puff(at: Vec, size: number) {
@@ -50,6 +39,21 @@ export class Effects {
       radius: Math.max(0.3, size * 0.45),
       age: 0,
       life: randomBetween(1.6, 3),
+    })
+  }
+
+  fume(at: Vec, drift: Vec) {
+    if (this.fumes.length >= MAX_FUMES) {
+      return
+    }
+    this.fumes.push({
+      x: at.x + randomBetween(-0.05, 0.05),
+      y: at.y,
+      vx: drift.x + randomBetween(-0.15, 0.15),
+      vy: randomBetween(0.6, 1.1),
+      radius: randomBetween(0.25, 0.4),
+      age: 0,
+      life: randomBetween(1.8, 2.8),
     })
   }
 
@@ -69,17 +73,17 @@ export class Effects {
   }
 
   update(dt: number) {
-    const drag = Math.exp(-dt * 1.5)
-    this.grains = advance(this.grains, dt, (g) => {
-      g.vx *= drag
-      g.vy = g.vy * drag - 9.81 * 0.6 * dt
-      g.x += g.vx * dt
-      g.y += g.vy * dt
-    })
     this.puffs = advance(this.puffs, dt, (p) => {
       p.x += p.vx * dt
       p.y += p.vy * dt
       p.radius += dt * 0.35
+    })
+    const fumeDrag = Math.exp(-dt * 0.8)
+    this.fumes = advance(this.fumes, dt, (f) => {
+      f.vx *= fumeDrag
+      f.x += f.vx * dt
+      f.y += f.vy * dt
+      f.radius += dt * 0.55
     })
     this.sparks = advance(this.sparks, dt, (s) => {
       s.vy -= 9.81 * dt

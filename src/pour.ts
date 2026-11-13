@@ -13,7 +13,7 @@ const GRADES: Grade[] = [
   { minSize: 0.2, maxSize: 0.36, areaShare: 0.4, corners: [5, 7] },
 ]
 
-const POUR_ZONE = { left: -6.8, right: 6.8, bottom: 14.8, top: 21.6 }
+const POUR_ZONE = { left: -6.8, right: 6.8, bottom: 16.6, top: 21.6 }
 const MAX_BUDGET = 4
 const PLACEMENT_TRIES = 12
 
@@ -98,7 +98,7 @@ export class Pourer {
   private tryPlace(pending: Pending, target: Vec): boolean {
     for (let attempt = 0; attempt < PLACEMENT_TRIES; attempt++) {
       const center = this.randomSpot(pending, target)
-      if (this.isFree(center, pending.size)) {
+      if (this.isFree(center, pending.size) && this.hasOpenSky(center)) {
         this.spawn(pending, center)
         return true
       }
@@ -112,6 +112,11 @@ export class Pourer {
       x: clamp(target.x + randomBetween(-spread, spread), POUR_ZONE.left, POUR_ZONE.right),
       y: clamp(target.y + randomBetween(0, pending.size + 1), POUR_ZONE.bottom, POUR_ZONE.top),
     }
+  }
+
+  private hasOpenSky(center: Vec): boolean {
+    const upward = new RAPIER.Ray(center, { x: 0, y: 1 })
+    return this.world.castRay(upward, POUR_ZONE.top + 2 - center.y, true) === null
   }
 
   private isFree(center: Vec, size: number): boolean {

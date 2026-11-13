@@ -31,7 +31,8 @@ for (const time of times) {
     const fill = `rgb(${Math.round(120 + 135 * s)},${Math.round(110 + 40 * s)},${Math.round(100 - 60 * s)})`
     svg += `<path d="${path(sim.rocks.worldPolygon(rock))}" fill="${fill}" stroke="#222" stroke-width="1"/>`
   }
-  for (const p of sim.effects.grains) svg += `<circle cx="${(p.x - VIEW.left) * scale}" cy="${(VIEW.top - p.y) * scale}" r="1.5" fill="#cba"/>`
+  const sand = sim.effects.sand
+  for (let i = 0; i < sand.count; i++) svg += `<circle cx="${(sand.x[i] - VIEW.left) * scale}" cy="${(VIEW.top - sand.y[i]) * scale}" r="1.5" fill="#cba"/>`
   svg += `<text x="10" y="30" fill="#fff" font-size="24">t=${time} n=${sim.rocks.count}</text></svg>`
   writeFileSync(`${out}-${time}.svg`, svg)
 }

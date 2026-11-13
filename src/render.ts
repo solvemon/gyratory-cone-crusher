@@ -2,7 +2,9 @@ import { add, length, normalize, perpendicular, rotate, scale, sub } from './geo
 import { BOOM, CHISEL_SHAPE, HOUSING_LENGTH, HOUSING_SHAPE } from './breaker.ts'
 import type { BoomPose } from './breaker.ts'
 import type { Vec } from './geometry.ts'
-import { BELT, ESSENTIAL_VIEW, MANTLE_PARTS, PIVOT, STATIC_PARTS, VIEW } from './machine.ts'
+import { ESSENTIAL_VIEW, GROUND_Y, MANTLE_PARTS, PIVOT, STATIC_PARTS, VIEW } from './machine.ts'
+import { TRUCK } from './trucks.ts'
+import type { Truck } from './trucks.ts'
 import type { Rock, RockField } from './rocks.ts'
 import type { Sim } from './sim.ts'
 import { createPaintTile, createPuffSprite, createRockTile, createSteelTile } from './textures.ts'
@@ -15,6 +17,27 @@ const EDGE_GRIME_STEPS = [1, 0.85, 0.7, 0.56, 0.43, 0.31, 0.2, 0.1]
 const MAX_PIXEL_RATIO = 2
 const SPRITE_MARGIN_PIXELS = 4
 const MANTLE_AXIS_LENGTH = 15
+const TRUCK_BODY_BOUNDS = { left: -4.0, right: 6.3, bottom: 0.8, top: 5.0 }
+const WHEEL_BOUNDS = { left: -1.45, right: 1.45, bottom: -1.45, top: 1.45 }
+const TRUCK_PAINTED_PARTS: Vec[][] = [
+  [{ x: -3.75, y: 4.3 }, { x: -3.15, y: 2.05 }, { x: 3.2, y: 2.05 }, { x: 3.5, y: 4.45 }],
+  [{ x: 3.6, y: 2.05 }, { x: 5.3, y: 2.05 }, { x: 5.3, y: 4.25 }, { x: 3.6, y: 4.25 }],
+  [{ x: 3.2, y: 4.25 }, { x: 5.6, y: 4.25 }, { x: 5.6, y: 4.5 }, { x: 3.4, y: 4.6 }],
+  [{ x: 5.3, y: 1.5 }, { x: 6.05, y: 1.5 }, { x: 6.05, y: 3.1 }, { x: 5.3, y: 3.4 }],
+]
+const TRUCK_CHASSIS: Vec[] = [{ x: -3.2, y: 1.4 }, { x: 5.7, y: 1.4 }, { x: 5.7, y: 2.1 }, { x: -3.2, y: 2.1 }]
+const TRUCK_WINDOW: Vec[] = [{ x: 4.2, y: 3.2 }, { x: 5.15, y: 3.2 }, { x: 5.15, y: 4.1 }, { x: 4.05, y: 4.1 }]
+const GAUGE = { left: 0.2, right: 2.6, bottom: 2.45, top: 2.75 }
+const LOAD_LEFT = -3.45
+const LOAD_RIGHT = 3.25
+const LOAD_PEAK_X = -0.2
+const TIRE_LUGS = 22
+const SAND_MIN_PIXELS = 1.6
+const SAND_COLORS = ['rgb(190, 174, 152)', 'rgb(152, 138, 120)', 'rgb(116, 104, 90)']
+const TIRE_SQUISH = 0.12
+const BEACON_HALO_RADIUS = 1.6
+const FUME_OPACITY = 0.1
+const BEACON_FLASH_HZ = 1.4
 const REBAKE_TURN = 0.35
 const ROCK_SHAKE_PIXELS = 2.5
 const TOOL_SHAKE_PIXELS = 3
@@ -43,8 +66,18 @@ const COLORS = {
   rockLit: 'rgba(255, 240, 215, 0.28)',
   rockShade: 'rgba(0, 0, 0, 0.4)',
   ghost: 'rgba(143, 179, 209, 0.12)',
-  belt: '#2b333b',
-  dust: '214, 196, 170',
+  road: '#1c1916',
+  load: 'hsl(32, 12%, 52%)',
+  roadEdge: 'rgba(214, 196, 170, 0.22)',
+  truckChassis: '#25272a',
+  truckGlass: '#161b21',
+  truckTrim: 'rgba(30, 24, 10, 0.55)',
+  tire: '#1a1b1c',
+  tireLug: '#0c0d0e',
+  rimSteel: '#3b3f43',
+  gaugeBack: '#141618',
+  gaugeFill: '#5bd16a',
+  beacon: '255, 170, 40',
 }
 
 type Frame = { scale: number; originX: number; originY: number; dpr: number }
@@ -107,8 +140,11 @@ export class Renderer {
   steelTexture: CanvasPattern
   paintTexture: CanvasPattern
   puffSprite: ImageBitmap
+  fumeSprite: ImageBitmap
   private viewContext: CanvasRenderingContext2D
   private mantleSprite: Sprite | null = null
+  private truckBody: Sprite | null = null
+  private truckWheel: Sprite | null = null
   private toolsSignature = ''
   private rockSprites = new Map<Rock, RockSprite>()
   private frameNumber = 0
@@ -123,6 +159,7 @@ export class Renderer {
     this.steelTexture = this.pattern(createSteelTile())
     this.paintTexture = this.pattern(createPaintTile())
     this.puffSprite = toBitmap(createPuffSprite())
+    this.fumeSprite = toBitmap(createPuffSprite('62, 64, 66'))
   }
 
   resize(area: ScreenArea) {
@@ -159,11 +196,13 @@ export class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
     this.useWorldTransform()
+    this.drawSand(sim)
     this.drawRocks(sim)
-    this.drawGrains(sim)
     this.drawPuffs(sim)
     this.drawSparks(sim)
     this.drawMantleSprite(sim.machine.angle)
+    this.drawTrucks(sim)
+    this.drawFumes(sim)
     this.drawTools(this.shaken(sim.breaker.pose(), sim.breaker.shake, sim.time), pourTarget)
   }
 
@@ -186,12 +225,20 @@ export class Renderer {
     this.paintOn(this.layers.steel, () => this.drawStatic())
     this.mantleSprite?.image.close()
     this.mantleSprite = this.paintMantleSprite()
+    this.truckBody?.image.close()
+    this.truckBody = this.paintSprite(TRUCK_BODY_BOUNDS, () => this.drawTruckBody())
+    this.truckWheel?.image.close()
+    this.truckWheel = this.paintSprite(WHEEL_BOUNDS, () => this.drawTruckWheel())
     this.toolsSignature = ''
   }
 
   private paintMantleSprite(): Sprite {
     const outline = boundsOf(MANTLE_PARTS.flat())
     const world = { ...outline, bottom: Math.min(outline.bottom, PIVOT.y - MANTLE_AXIS_LENGTH) }
+    return this.paintSprite(world, () => this.drawMantle(0))
+  }
+
+  private paintSprite(world: Bounds, paint: () => void): Sprite {
     const { scale, dpr } = this.frame
     const margin = SPRITE_MARGIN_PIXELS
     const width = (world.right - world.left) * scale + margin * 2
@@ -199,7 +246,7 @@ export class Renderer {
     const sprite = this.bakeSprite(width, height)
     sprite.setTransform(scale * dpr, 0, 0, -scale * dpr, (margin - world.left * scale) * dpr, (margin + world.top * scale) * dpr)
     this.context = sprite
-    this.drawMantle(0)
+    paint()
     this.context = this.viewContext
     return { image: this.bakery.transferToImageBitmap(), world, margin, width, height }
   }
@@ -214,22 +261,246 @@ export class Renderer {
     return context
   }
 
-  private drawMantleSprite(angle: number) {
-    const sprite = this.mantleSprite
-    if (!sprite) {
-      return
-    }
+  private drawSprite(sprite: Sprite, origin: Vec, pivot: Vec, angle: number) {
     const ctx = this.viewContext
     const { scale, originX, originY, dpr } = this.frame
-    const pivotX = originX + PIVOT.x * scale
-    const pivotY = originY - PIVOT.y * scale
-    const spriteLeft = originX + sprite.world.left * scale - sprite.margin
-    const spriteTop = originY - sprite.world.top * scale - sprite.margin
+    const pivotX = originX + (origin.x + pivot.x) * scale
+    const pivotY = originY - (origin.y + pivot.y) * scale
+    const left = (sprite.world.left - pivot.x) * scale - sprite.margin
+    const top = -(sprite.world.top - pivot.y) * scale - sprite.margin
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.translate(pivotX, pivotY)
     ctx.rotate(-angle)
-    ctx.drawImage(sprite.image, spriteLeft - pivotX, spriteTop - pivotY, sprite.width, sprite.height)
+    ctx.drawImage(sprite.image, left, top, sprite.width, sprite.height)
     this.useWorldTransform()
+  }
+
+  private drawMantleSprite(angle: number) {
+    if (this.mantleSprite) {
+      this.drawSprite(this.mantleSprite, { x: 0, y: 0 }, PIVOT, angle)
+    }
+  }
+
+  private drawTrucks(sim: Sim) {
+    for (const truck of sim.trucks.trucks) {
+      const left = truck.x + TRUCK_BODY_BOUNDS.left
+      const right = truck.x + TRUCK_BODY_BOUNDS.right
+      if (right < this.visible.left || left > this.visible.right) {
+        continue
+      }
+      this.drawTruck(truck, sim.time)
+    }
+  }
+
+  private drawTruck(truck: Truck, time: number) {
+    const body = { x: truck.x, y: GROUND_Y + truck.sag }
+    if (truck.visibleHeap > 0) {
+      this.inTruckFrame(truck, () => this.drawLoad(truck))
+    }
+    if (this.truckBody) {
+      this.drawSprite(this.truckBody, body, TRUCK.pitchPivot, truck.pitch)
+    }
+    if (this.truckWheel) {
+      for (const wheel of TRUCK.wheels) {
+        this.drawSprite(this.truckWheel, { x: truck.x + wheel.x, y: GROUND_Y + wheel.y - TIRE_SQUISH }, { x: 0, y: 0 }, truck.wheelTurn)
+      }
+    }
+    this.inTruckFrame(truck, () => {
+      this.drawFillGauge(truck, time)
+      if (truck.full) {
+        this.drawBeacon(time)
+      }
+    })
+  }
+
+  private inTruckFrame(truck: Truck, draw: () => void) {
+    const ctx = this.viewContext
+    const pivot = TRUCK.pitchPivot
+    this.useWorldTransform()
+    ctx.translate(truck.x + pivot.x, GROUND_Y + truck.sag + pivot.y)
+    ctx.rotate(truck.pitch)
+    ctx.translate(-pivot.x, -pivot.y)
+    draw()
+    this.useWorldTransform()
+  }
+
+  private drawLoad(truck: Truck) {
+    const ctx = this.viewContext
+    const height = truck.visibleHeap
+    const seed = truck.body.handle
+    const mound: Vec[] = [{ x: LOAD_LEFT, y: TRUCK.rimY - 0.05 }]
+    for (let x = LOAD_LEFT + 0.3; x < LOAD_RIGHT; x += 0.35) {
+      const across = (x - LOAD_PEAK_X) / (LOAD_RIGHT - LOAD_LEFT)
+      const shape = Math.max(0, 1 - 3.2 * across * across)
+      const lumps = 0.07 * Math.sin(x * 3.7 + seed) + 0.05 * Math.sin(x * 7.3 + seed * 2.1)
+      mound.push({ x, y: TRUCK.rimY + height * shape + lumps * Math.min(1, height * 3) })
+    }
+    mound.push({ x: LOAD_RIGHT, y: TRUCK.rimY - 0.05 })
+    this.tracePolygon(mound)
+    ctx.fillStyle = COLORS.load
+    ctx.fill()
+    this.rockTexture.setTransform(placementMatrix({ anchor: { x: seed * 3.1, y: 0 }, angle: 0.4 }, ROCK_TEXTURE_METERS_PER_PIXEL * 0.7))
+    ctx.globalCompositeOperation = 'overlay'
+    ctx.fillStyle = this.rockTexture
+    ctx.fill()
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.strokeStyle = COLORS.rockOutline
+    ctx.lineWidth = this.pixels(1)
+    ctx.stroke()
+  }
+
+  private drawFillGauge(truck: Truck, time: number) {
+    const ctx = this.viewContext
+    const { left, right, bottom, top } = GAUGE
+    ctx.fillStyle = COLORS.gaugeBack
+    ctx.fillRect(left, bottom, right - left, top - bottom)
+    let color = COLORS.gaugeFill
+    if (truck.full) {
+      color = `rgba(${COLORS.beacon}, ${0.45 + 0.55 * flash(time)})`
+    }
+    const inset = 0.05
+    ctx.fillStyle = color
+    ctx.fillRect(left + inset, bottom + inset, (right - left - inset * 2) * truck.fill, top - bottom - inset * 2)
+  }
+
+  private drawBeacon(time: number) {
+    const ctx = this.viewContext
+    const { x, y } = TRUCK.beacon
+    const glow = flash(time)
+    ctx.fillStyle = `rgba(${COLORS.beacon}, ${0.55 + 0.45 * glow})`
+    ctx.beginPath()
+    ctx.arc(x, y + 0.12, 0.15, 0, Math.PI * 2)
+    ctx.fill()
+    const halo = ctx.createRadialGradient(x, y + 0.12, 0, x, y + 0.12, BEACON_HALO_RADIUS)
+    halo.addColorStop(0, `rgba(${COLORS.beacon}, ${0.55 * glow})`)
+    halo.addColorStop(1, `rgba(${COLORS.beacon}, 0)`)
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.fillStyle = halo
+    ctx.fillRect(x - BEACON_HALO_RADIUS, y + 0.12 - BEACON_HALO_RADIUS, BEACON_HALO_RADIUS * 2, BEACON_HALO_RADIUS * 2)
+    ctx.globalCompositeOperation = 'source-over'
+  }
+
+  private drawFumes(sim: Sim) {
+    const ctx = this.viewContext
+    for (const fume of sim.effects.fumes) {
+      const progress = fume.age / fume.life
+      const fadeIn = Math.min(1, progress * 5)
+      ctx.globalAlpha = FUME_OPACITY * fadeIn * (1 - progress)
+      ctx.drawImage(this.fumeSprite, fume.x - fume.radius, fume.y - fume.radius, fume.radius * 2, fume.radius * 2)
+    }
+    ctx.globalAlpha = 1
+  }
+
+  private drawTruckBody() {
+    const ctx = this.context
+    ctx.fillStyle = COLORS.truckChassis
+    this.tracePolygon(TRUCK_CHASSIS)
+    ctx.fill()
+    this.drawSteel([{ x: 5.85, y: 0.95 }, { x: 6.0, y: 0.95 }, { x: 5.6, y: 3.1 }, { x: 5.45, y: 3.1 }])
+    for (const part of TRUCK_PAINTED_PARTS) {
+      this.drawPainted(part, NO_ROTATION)
+    }
+    ctx.lineCap = 'round'
+    ctx.strokeStyle = COLORS.truckTrim
+    ctx.lineWidth = 0.09
+    for (const x of [-2.3, -0.8, 0.7, 2.2]) {
+      ctx.beginPath()
+      ctx.moveTo(x - 0.05, 2.15)
+      ctx.lineTo(x + 0.02, 4.2)
+      ctx.stroke()
+    }
+    ctx.lineWidth = 0.14
+    ctx.beginPath()
+    ctx.moveTo(-3.72, 4.28)
+    ctx.lineTo(3.48, 4.43)
+    ctx.stroke()
+    ctx.fillStyle = COLORS.truckGlass
+    this.tracePolygon(TRUCK_WINDOW)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(200, 215, 230, 0.18)'
+    ctx.lineWidth = this.pixels(1.5)
+    ctx.beginPath()
+    ctx.moveTo(4.3, 3.35)
+    ctx.lineTo(4.75, 4.0)
+    ctx.stroke()
+    ctx.strokeStyle = COLORS.truckTrim
+    ctx.lineWidth = 0.05
+    for (const y of [1.8, 2.1, 2.4, 2.7]) {
+      ctx.beginPath()
+      ctx.moveTo(5.75, y)
+      ctx.lineTo(6.0, y)
+      ctx.stroke()
+    }
+    ctx.strokeStyle = COLORS.truckChassis
+    ctx.lineWidth = 0.16
+    ctx.beginPath()
+    ctx.moveTo(TRUCK.stackTop.x, 3.0)
+    ctx.lineTo(TRUCK.stackTop.x, TRUCK.stackTop.y)
+    ctx.stroke()
+    ctx.lineWidth = 0.06
+    ctx.beginPath()
+    ctx.moveTo(5.3, 3.9)
+    ctx.lineTo(6.05, 3.9)
+    ctx.moveTo(5.4, 3.35)
+    ctx.lineTo(5.4, 3.9)
+    ctx.moveTo(6.0, 3.1)
+    ctx.lineTo(6.0, 3.9)
+    ctx.stroke()
+    ctx.fillStyle = COLORS.truckChassis
+    ctx.fillRect(TRUCK.beacon.x - 0.16, TRUCK.beacon.y - 0.05, 0.32, 0.1)
+  }
+
+  private drawTruckWheel() {
+    const ctx = this.context
+    const radius = TRUCK.wheelRadius
+    const tire = ctx.createRadialGradient(0, 0, radius * 0.5, 0, 0, radius)
+    tire.addColorStop(0, '#2c2e30')
+    tire.addColorStop(1, COLORS.tire)
+    ctx.fillStyle = tire
+    ctx.beginPath()
+    ctx.arc(0, 0, radius, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = COLORS.tireLug
+    ctx.lineWidth = 0.13
+    for (let i = 0; i < TIRE_LUGS; i++) {
+      const angle = (i / TIRE_LUGS) * Math.PI * 2
+      ctx.beginPath()
+      ctx.moveTo(Math.cos(angle) * radius * 0.86, Math.sin(angle) * radius * 0.86)
+      ctx.lineTo(Math.cos(angle + 0.06) * radius, Math.sin(angle + 0.06) * radius)
+      ctx.stroke()
+    }
+    this.rockTexture.setTransform(placementMatrix({ anchor: { x: 7, y: 3 }, angle: 0 }, ROCK_TEXTURE_METERS_PER_PIXEL))
+    ctx.globalCompositeOperation = 'overlay'
+    ctx.globalAlpha = 0.5
+    ctx.fillStyle = this.rockTexture
+    ctx.beginPath()
+    ctx.arc(0, 0, radius, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalAlpha = 1
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'
+    ctx.lineWidth = 0.05
+    ctx.beginPath()
+    ctx.arc(0, 0, radius * 0.78, 0, Math.PI * 2)
+    ctx.stroke()
+    this.steelTexture.setTransform(placementMatrix(NO_ROTATION, STEEL_TEXTURE_METERS_PER_PIXEL))
+    ctx.fillStyle = this.steelTexture
+    ctx.beginPath()
+    ctx.arc(0, 0, radius * 0.52, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
+    ctx.fill()
+    ctx.fillStyle = COLORS.rimSteel
+    for (let i = 0; i < 10; i++) {
+      const angle = (i / 10) * Math.PI * 2
+      ctx.beginPath()
+      ctx.arc(Math.cos(angle) * radius * 0.36, Math.sin(angle) * radius * 0.36, 0.05, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.fillStyle = COLORS.truckChassis
+    ctx.beginPath()
+    ctx.arc(0, 0, radius * 0.16, 0, Math.PI * 2)
+    ctx.fill()
   }
 
   private shaken(pose: BoomPose, shake: number, time: number): BoomPose {
@@ -381,14 +652,22 @@ export class Renderer {
     return { image: this.bakery.transferToImageBitmap(), angle, scale, dpr, width, height, centerX, centerY, lastDrawn: this.frameNumber }
   }
 
-  private drawGrains(sim: Sim) {
-    const ctx = this.context
-    ctx.fillStyle = `rgb(${COLORS.dust})`
-    for (const grain of sim.effects.grains) {
-      ctx.globalAlpha = 0.75 * (1 - grain.age / grain.life)
-      ctx.fillRect(grain.x - grain.size / 2, grain.y - grain.size / 2, grain.size, grain.size)
+  private drawSand(sim: Sim) {
+    const ctx = this.viewContext
+    const sand = sim.effects.sand
+    const smallest = SAND_MIN_PIXELS / this.frame.scale
+    for (let shade = 0; shade < SAND_COLORS.length; shade++) {
+      ctx.beginPath()
+      for (let i = 0; i < sand.count; i++) {
+        if (sand.shade[i] !== shade) {
+          continue
+        }
+        const size = Math.max(sand.size[i], smallest)
+        ctx.rect(sand.x[i] - size / 2, sand.y[i] - size / 2, size, size)
+      }
+      ctx.fillStyle = SAND_COLORS[shade]
+      ctx.fill()
     }
-    ctx.globalAlpha = 1
   }
 
   private drawPuffs(sim: Sim) {
@@ -490,18 +769,27 @@ export class Renderer {
     for (const part of STATIC_PARTS) {
       this.drawSteel(part)
     }
+    this.drawRoad()
+  }
+
+  private drawRoad() {
     const ctx = this.context
-    ctx.fillStyle = COLORS.belt
-    ctx.fillRect(BELT.left, BELT.top - BELT.thickness, BELT.right - BELT.left, BELT.thickness)
-    ctx.strokeStyle = COLORS.steelLit
-    ctx.lineWidth = this.pixels(1)
+    const { left, right, bottom } = this.visible
+    ctx.fillStyle = COLORS.road
+    ctx.fillRect(left, bottom, right - left, GROUND_Y - bottom)
+    this.rockTexture.setTransform(placementMatrix(NO_ROTATION, ROCK_TEXTURE_METERS_PER_PIXEL))
+    ctx.globalAlpha = 0.35
+    ctx.globalCompositeOperation = 'overlay'
+    ctx.fillStyle = this.rockTexture
+    ctx.fillRect(left, bottom, right - left, GROUND_Y - bottom)
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = COLORS.roadEdge
+    ctx.lineWidth = this.pixels(1.5)
     ctx.beginPath()
-    ctx.moveTo(BELT.left, BELT.top)
-    ctx.lineTo(BELT.right, BELT.top)
+    ctx.moveTo(left, GROUND_Y)
+    ctx.lineTo(right, GROUND_Y)
     ctx.stroke()
-    for (let x = BELT.left + 0.5; x < BELT.right; x += 1.2) {
-      this.drawPin({ x, y: BELT.top - BELT.thickness / 2 }, BELT.thickness * 0.3, COLORS.roller)
-    }
   }
 
   private drawMantle(angle: number) {
@@ -649,6 +937,10 @@ function vibration(level: number, time: number, phase: number): number {
     return 0
   }
   return level * Math.sin(2 * Math.PI * SHAKE_HZ * time + phase)
+}
+
+function flash(time: number): number {
+  return Math.max(0, Math.sin(time * 2 * Math.PI * BEACON_FLASH_HZ)) ** 2
 }
 
 function turnBetween(from: number, to: number): number {

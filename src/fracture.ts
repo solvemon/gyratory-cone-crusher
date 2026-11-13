@@ -323,7 +323,7 @@ export class Fracturer {
   private pulverize(rock: Rock): boolean {
     const center = rock.body.translation()
     const velocity = rock.body.linvel()
-    this.effects.dust(center, rock.area, velocity, rock.size * 0.4)
+    this.effects.dust(center, rock.area, velocity, rock.size * 0.4, rock.area)
     this.effects.puff(center, rock.size)
     this.rocks.remove(rock)
     this.counters.cracks++
@@ -377,7 +377,7 @@ export class Fracturer {
     for (const { piece, center, motion } of fragments) {
       const tooSmallToSimulate = maxExtent(piece) < this.dustSize
       if (tooSmallToSimulate) {
-        this.effects.dust(center, polygonArea(piece), motion.velocity, maxExtent(piece))
+        this.effects.dust(center, polygonArea(piece), motion.velocity, maxExtent(piece), polygonArea(piece))
         continue
       }
       const kick = scale(normalize(sub(center, parentCenter)), 0.3)

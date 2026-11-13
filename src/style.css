@@ -35,6 +35,10 @@ body {
   cursor: crosshair;
 }
 
+#view.over-truck {
+  cursor: pointer;
+}
+
 .panel {
   position: fixed;
   top: 12px;
