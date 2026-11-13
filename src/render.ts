@@ -17,7 +17,7 @@ const EDGE_GRIME_STEPS = [1, 0.85, 0.7, 0.56, 0.43, 0.31, 0.2, 0.1]
 const MAX_PIXEL_RATIO = 2
 const SPRITE_MARGIN_PIXELS = 4
 const MANTLE_AXIS_LENGTH = 15
-const TRUCK_BODY_BOUNDS = { left: -4.0, right: 6.3, bottom: 0.8, top: 5.0 }
+const TRUCK_BODY_BOUNDS = { left: -4.0, right: 6.3, bottom: 0.4, top: 5.0 }
 const WHEEL_BOUNDS = { left: -1.45, right: 1.45, bottom: -1.45, top: 1.45 }
 const TRUCK_PAINTED_PARTS: Vec[][] = [
   [{ x: -3.75, y: 4.3 }, { x: -3.15, y: 2.05 }, { x: 3.2, y: 2.05 }, { x: 3.5, y: 4.45 }],
@@ -25,9 +25,21 @@ const TRUCK_PAINTED_PARTS: Vec[][] = [
   [{ x: 3.2, y: 4.25 }, { x: 5.6, y: 4.25 }, { x: 5.6, y: 4.5 }, { x: 3.4, y: 4.6 }],
   [{ x: 5.3, y: 1.5 }, { x: 6.05, y: 1.5 }, { x: 6.05, y: 3.1 }, { x: 5.3, y: 3.4 }],
 ]
-const TRUCK_CHASSIS: Vec[] = [{ x: -3.2, y: 1.4 }, { x: 5.7, y: 1.4 }, { x: 5.7, y: 2.1 }, { x: -3.2, y: 2.1 }]
+const TRUCK_FRAME: Vec[] = [
+  { x: -3.2, y: 2.1 },
+  { x: -3.2, y: 1.8 },
+  { x: -2.7, y: 1.45 },
+  { x: 5.2, y: 1.45 },
+  { x: 5.7, y: 1.7 },
+  { x: 5.7, y: 2.1 },
+]
+const UNDER_SHADOW = { left: -2.6, right: 5.4, bottom: 0.95, top: 1.5 }
+const FUEL_TANK = { left: 0.75, right: 2.75, bottom: 0.85, top: 1.55 }
+const MUD_FLAP = { left: -2.75, right: -2.55, bottom: 0.5, top: 2.05 }
+const WELL_CLEARANCE = 0.16
+const FRONT_FENDER = { inner: 1.55, outer: 1.85, from: 0.15, to: 2.75 }
+const REAR_ARCH = { inner: 1.55, outer: 1.72, from: 0.35, to: 2.8 }
 const TRUCK_WINDOW: Vec[] = [{ x: 4.2, y: 3.2 }, { x: 5.15, y: 3.2 }, { x: 5.15, y: 4.1 }, { x: 4.05, y: 4.1 }]
-const GAUGE = { left: 0.2, right: 2.6, bottom: 2.45, top: 2.75 }
 const LOAD_LEFT = -3.45
 const LOAD_RIGHT = 3.25
 const LOAD_PEAK_X = -0.2
@@ -75,8 +87,10 @@ const COLORS = {
   tire: '#1a1b1c',
   tireLug: '#0c0d0e',
   rimSteel: '#3b3f43',
-  gaugeBack: '#141618',
-  gaugeFill: '#5bd16a',
+  wheelWell: 'rgba(10, 10, 11, 0.94)',
+  underShadow: 'rgba(0, 0, 0, 0.45)',
+  fuelTank: '#2d3034',
+  mudFlap: '#151617',
   beacon: '255, 170, 40',
 }
 
@@ -305,12 +319,9 @@ export class Renderer {
         this.drawSprite(this.truckWheel, { x: truck.x + wheel.x, y: GROUND_Y + wheel.y - TIRE_SQUISH }, { x: 0, y: 0 }, truck.wheelTurn)
       }
     }
-    this.inTruckFrame(truck, () => {
-      this.drawFillGauge(truck, time)
-      if (truck.full) {
-        this.drawBeacon(time)
-      }
-    })
+    if (truck.full) {
+      this.inTruckFrame(truck, () => this.drawBeacon(time))
+    }
   }
 
   private inTruckFrame(truck: Truck, draw: () => void) {
@@ -349,20 +360,6 @@ export class Renderer {
     ctx.stroke()
   }
 
-  private drawFillGauge(truck: Truck, time: number) {
-    const ctx = this.viewContext
-    const { left, right, bottom, top } = GAUGE
-    ctx.fillStyle = COLORS.gaugeBack
-    ctx.fillRect(left, bottom, right - left, top - bottom)
-    let color = COLORS.gaugeFill
-    if (truck.full) {
-      color = `rgba(${COLORS.beacon}, ${0.45 + 0.55 * flash(time)})`
-    }
-    const inset = 0.05
-    ctx.fillStyle = color
-    ctx.fillRect(left + inset, bottom + inset, (right - left - inset * 2) * truck.fill, top - bottom - inset * 2)
-  }
-
   private drawBeacon(time: number) {
     const ctx = this.viewContext
     const { x, y } = TRUCK.beacon
@@ -393,13 +390,12 @@ export class Renderer {
 
   private drawTruckBody() {
     const ctx = this.context
-    ctx.fillStyle = COLORS.truckChassis
-    this.tracePolygon(TRUCK_CHASSIS)
-    ctx.fill()
+    this.drawUnderChassis()
     this.drawSteel([{ x: 5.85, y: 0.95 }, { x: 6.0, y: 0.95 }, { x: 5.6, y: 3.1 }, { x: 5.45, y: 3.1 }])
     for (const part of TRUCK_PAINTED_PARTS) {
       this.drawPainted(part, NO_ROTATION)
     }
+    this.drawWheelArches()
     ctx.lineCap = 'round'
     ctx.strokeStyle = COLORS.truckTrim
     ctx.lineWidth = 0.09
@@ -448,6 +444,53 @@ export class Renderer {
     ctx.stroke()
     ctx.fillStyle = COLORS.truckChassis
     ctx.fillRect(TRUCK.beacon.x - 0.16, TRUCK.beacon.y - 0.05, 0.32, 0.1)
+  }
+
+  private drawUnderChassis() {
+    const ctx = this.context
+    ctx.fillStyle = COLORS.underShadow
+    fillBox(ctx, UNDER_SHADOW)
+    ctx.fillStyle = COLORS.fuelTank
+    ctx.beginPath()
+    ctx.roundRect(FUEL_TANK.left, FUEL_TANK.bottom, FUEL_TANK.right - FUEL_TANK.left, FUEL_TANK.top - FUEL_TANK.bottom, 0.18)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)'
+    ctx.lineWidth = 0.06
+    for (const x of [1.25, 2.25]) {
+      ctx.beginPath()
+      ctx.moveTo(x, FUEL_TANK.bottom)
+      ctx.lineTo(x, FUEL_TANK.top)
+      ctx.stroke()
+    }
+    ctx.strokeStyle = 'rgba(210, 220, 230, 0.12)'
+    ctx.lineWidth = this.pixels(1)
+    ctx.beginPath()
+    ctx.moveTo(FUEL_TANK.left + 0.15, FUEL_TANK.top - 0.08)
+    ctx.lineTo(FUEL_TANK.right - 0.15, FUEL_TANK.top - 0.08)
+    ctx.stroke()
+    ctx.fillStyle = COLORS.truckChassis
+    this.tracePolygon(TRUCK_FRAME)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)'
+    ctx.lineWidth = this.pixels(1)
+    ctx.stroke()
+    ctx.fillStyle = COLORS.mudFlap
+    fillBox(ctx, MUD_FLAP)
+  }
+
+  private drawWheelArches() {
+    const ctx = this.context
+    const radius = TRUCK.wheelRadius + WELL_CLEARANCE
+    ctx.fillStyle = COLORS.wheelWell
+    for (const wheel of TRUCK.wheels) {
+      ctx.beginPath()
+      ctx.arc(wheel.x, wheel.y, radius, 0, Math.PI)
+      ctx.closePath()
+      ctx.fill()
+    }
+    const [rear, front] = TRUCK.wheels
+    this.drawPainted(arcBand(front, FRONT_FENDER), NO_ROTATION)
+    this.drawPainted(arcBand(rear, REAR_ARCH), NO_ROTATION)
   }
 
   private drawTruckWheel() {
@@ -937,6 +980,22 @@ function vibration(level: number, time: number, phase: number): number {
     return 0
   }
   return level * Math.sin(2 * Math.PI * SHAKE_HZ * time + phase)
+}
+
+function fillBox(ctx: Context2D, box: Bounds) {
+  ctx.fillRect(box.left, box.bottom, box.right - box.left, box.top - box.bottom)
+}
+
+function arcBand(center: Vec, band: { inner: number; outer: number; from: number; to: number }): Vec[] {
+  const steps = 14
+  const outer: Vec[] = []
+  const inner: Vec[] = []
+  for (let i = 0; i <= steps; i++) {
+    const angle = band.from + ((band.to - band.from) * i) / steps
+    outer.push({ x: center.x + Math.cos(angle) * band.outer, y: center.y + Math.sin(angle) * band.outer })
+    inner.push({ x: center.x + Math.cos(angle) * band.inner, y: center.y + Math.sin(angle) * band.inner })
+  }
+  return outer.concat(inner.reverse())
 }
 
 function flash(time: number): number {
