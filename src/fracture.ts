@@ -35,6 +35,7 @@ import {
   LOAD_SMOOTHING,
   MAX_BREAKS_PER_STEP,
   MIN_COMPACTNESS,
+  WEAR_CHIP_DEPTH,
 } from './tuning.ts'
 
 type Contact = { point: Vec; inward: Vec; force: number; penetration: number; steel: boolean }
@@ -42,7 +43,7 @@ type Squeeze = { a: Contact; b: Contact; force: number; steel: boolean }
 
 export type FractureCounters = { cracks: number; chips: number; jams: number }
 
-function inwardDirection(normal: Vec, flipped: boolean, point: Vec, rockCenter: Vec): Vec {
+export function inwardDirection(normal: Vec, flipped: boolean, point: Vec, rockCenter: Vec): Vec {
   let inward = scale(normal, -1)
   if (flipped) {
     inward = normal
@@ -246,7 +247,7 @@ export class Fracturer {
     }
     const canChip = rock.chipCooldown <= 0 && rock.chipLoad > weakening * CHIP_RATIO
     if (hardest && canChip) {
-      return () => this.chip(rock, hardest)
+      return () => this.chip(rock, hardest.point)
     }
     return null
   }
@@ -329,10 +330,21 @@ export class Fracturer {
     return true
   }
 
-  private chip(rock: Rock, contact: Contact): boolean {
+  wearAway(rock: Rock, point: Vec): boolean {
+    if (rock.chipCooldown > 0) {
+      return false
+    }
+    const worn = this.chip(rock, point, WEAR_CHIP_DEPTH)
+    if (worn) {
+      this.effects.dust(point, 0.01, { x: 0, y: 0 }, 0.08)
+    }
+    return worn
+  }
+
+  private chip(rock: Rock, point: Vec, maxDepth = Infinity): boolean {
     const polygon = this.rocks.worldPolygon(rock)
-    const corner = nearestVertex(polygon, contact.point)
-    const cornerIsLoaded = length(sub(corner, contact.point)) < rock.size * 0.2
+    const corner = nearestVertex(polygon, point)
+    const cornerIsLoaded = length(sub(corner, point)) < rock.size * 0.2
     if (!cornerIsLoaded) {
       return false
     }
@@ -340,7 +352,7 @@ export class Fracturer {
     const towardCenter = normalize(sub(polygonCentroid(polygon), corner))
     for (let attempt = 0; attempt < CUT_ATTEMPTS; attempt++) {
       const cutNormal = rotate(towardCenter, randomBetween(-0.35, 0.35))
-      const depth = rock.size * randomBetween(0.1, 0.28)
+      const depth = Math.min(maxDepth, rock.size * randomBetween(0.1, 0.28))
       const [flake, remainder] = splitPolygon(polygon, add(corner, scale(cutNormal, depth)), cutNormal)
       const flakeIsChip = polygonArea(flake) < total * 0.35 && compactness(flake) > MIN_COMPACTNESS
       if (flakeIsChip && isSolidPiece(remainder)) {

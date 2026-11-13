@@ -3,6 +3,7 @@ import type { EventQueue, World } from '@dimforge/rapier2d-compat'
 import { Breaker } from './breaker.ts'
 import { Effects } from './effects.ts'
 import { Fracturer } from './fracture.ts'
+import { Hum } from './hum.ts'
 import { BELT, Machine } from './machine.ts'
 import { Pourer } from './pour.ts'
 import { RockField } from './rocks.ts'
@@ -24,6 +25,7 @@ export class Sim {
   pourer: Pourer
   fracturer: Fracturer
   breaker: Breaker
+  hum = new Hum()
   timings = { physics: 0, fracture: 0 }
   time = 0
 
@@ -47,6 +49,7 @@ export class Sim {
     this.machine.update(dt * mantleCatchUp)
     this.pourer.update(dt)
     this.breaker.update(dt)
+    this.hum.update(this.world, this.machine, this.rocks, this.fracturer, dt)
     const physicsStart = performance.now()
     this.world.step(this.events)
     this.timings.physics = performance.now() - physicsStart

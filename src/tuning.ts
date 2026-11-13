@@ -10,6 +10,14 @@ export const STEEL_FRICTION = 0.7
 export const MANTLE_HZ = 2
 export const MANTLE_THROW_AT_BOTTOM = 0.15
 export const MANTLE_SPIN_UP_SECONDS = 1.2
+export const HUM_HZ = 9
+export const HUM_ACCELERATION = 8
+export const HUM_DEPTH = 3
+export const HUM_FALLOFF = 0.7
+export const HUM_STEPS_PER_PASS = 3
+export const WEAR_RATE = 0.002
+export const WEAR_MIN_THICKNESS = 0.8
+export const WEAR_CHIP_DEPTH = 0.3
 
 export const STRENGTH_SCALE = 900
 export const STRENGTH_EXPONENT = 1.6

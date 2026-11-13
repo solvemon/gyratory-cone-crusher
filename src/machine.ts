@@ -62,6 +62,7 @@ function addConvexCollider(world: World, body: RigidBody, poly: Vec[], origin: V
 export class Machine {
   mantle: RigidBody
   mantleColliders: number[]
+  steelColliders: number[]
   angle = 0
   running = true
   speed = 0
@@ -69,9 +70,7 @@ export class Machine {
 
   constructor(world: World) {
     const ground = world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
-    for (const part of STATIC_PARTS) {
-      addConvexCollider(world, ground, part, { x: 0, y: 0 })
-    }
+    const frameColliders = STATIC_PARTS.map((part) => addConvexCollider(world, ground, part, { x: 0, y: 0 }))
     const beltCenter = { x: (BELT.left + BELT.right) / 2, y: BELT.top - BELT.thickness / 2 }
     const beltDesc = RAPIER.ColliderDesc.cuboid((BELT.right - BELT.left) / 2, BELT.thickness / 2)
       .setTranslation(beltCenter.x, beltCenter.y)
@@ -82,6 +81,7 @@ export class Machine {
       RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(PIVOT.x, PIVOT.y),
     )
     this.mantleColliders = MANTLE_PARTS.map((part) => addConvexCollider(world, this.mantle, part, PIVOT))
+    this.steelColliders = frameColliders.concat(this.mantleColliders)
   }
 
   update(dt: number) {

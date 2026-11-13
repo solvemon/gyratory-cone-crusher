@@ -26,6 +26,7 @@ export type Rock = {
   chipLoad: number
   steelDepth: number
   shake: number
+  wear: number
   shakeDirection: number
   evaluated: boolean
   chipCooldown: number
@@ -94,6 +95,7 @@ export class RockField {
       chipLoad: 0,
       steelDepth: 0,
       shake: 0,
+      wear: 0,
       shakeDirection: 0,
       evaluated: false,
       chipCooldown: 0,
