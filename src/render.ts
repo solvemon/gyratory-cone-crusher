@@ -62,8 +62,10 @@ export type Layers = {
   tools: HTMLCanvasElement
 }
 
+type Context2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+
 type RockSprite = {
-  canvas: HTMLCanvasElement
+  image: ImageBitmap
   angle: number
   scale: number
   dpr: number
@@ -71,9 +73,10 @@ type RockSprite = {
   height: number
   centerX: number
   centerY: number
+  lastDrawn: number
 }
 
-type Sprite = { canvas: HTMLCanvasElement; world: Bounds; margin: number; width: number; height: number }
+type Sprite = { image: ImageBitmap; world: Bounds; margin: number; width: number; height: number }
 
 function contextOf(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   const context = canvas.getContext('2d')
@@ -94,17 +97,19 @@ function poseSignature(pose: BoomPose, pourTarget: Vec | null): string {
 export class Renderer {
   layers: Layers
   canvas: HTMLCanvasElement
-  context: CanvasRenderingContext2D
+  context: Context2D
   frame: Frame = { scale: 1, originX: 0, originY: 0, dpr: 1 }
   visible: Bounds = VIEW
   rockTexture: CanvasPattern
   steelTexture: CanvasPattern
   paintTexture: CanvasPattern
-  puffSprite: HTMLCanvasElement
+  puffSprite: ImageBitmap
   private viewContext: CanvasRenderingContext2D
   private mantleSprite: Sprite | null = null
   private toolsSignature = ''
-  private rockSprites = new WeakMap<Rock, RockSprite>()
+  private rockSprites = new Map<Rock, RockSprite>()
+  private frameNumber = 0
+  private bakery = new OffscreenCanvas(1, 1)
 
   constructor(layers: Layers) {
     this.layers = layers
@@ -114,7 +119,7 @@ export class Renderer {
     this.rockTexture = this.pattern(createRockTile())
     this.steelTexture = this.pattern(createSteelTile())
     this.paintTexture = this.pattern(createPaintTile())
-    this.puffSprite = createPuffSprite()
+    this.puffSprite = toBitmap(createPuffSprite())
   }
 
   resize(area: ScreenArea) {
@@ -176,6 +181,7 @@ export class Renderer {
       this.drawGrid()
     })
     this.paintOn(this.layers.steel, () => this.drawStatic())
+    this.mantleSprite?.image.close()
     this.mantleSprite = this.paintMantleSprite()
     this.toolsSignature = ''
   }
@@ -187,15 +193,22 @@ export class Renderer {
     const margin = SPRITE_MARGIN_PIXELS
     const width = (world.right - world.left) * scale + margin * 2
     const height = (world.top - world.bottom) * scale + margin * 2
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.ceil(width * dpr)
-    canvas.height = Math.ceil(height * dpr)
-    const sprite = contextOf(canvas)
+    const sprite = this.bakeSprite(width, height)
     sprite.setTransform(scale * dpr, 0, 0, -scale * dpr, (margin - world.left * scale) * dpr, (margin + world.top * scale) * dpr)
     this.context = sprite
     this.drawMantle(0)
     this.context = this.viewContext
-    return { canvas, world, margin, width, height }
+    return { image: this.bakery.transferToImageBitmap(), world, margin, width, height }
+  }
+
+  private bakeSprite(width: number, height: number): OffscreenCanvasRenderingContext2D {
+    this.bakery.width = Math.ceil(width * this.frame.dpr)
+    this.bakery.height = Math.ceil(height * this.frame.dpr)
+    const context = this.bakery.getContext('2d')
+    if (!context) {
+      throw new Error('Offscreen canvas 2D is not available')
+    }
+    return context
   }
 
   private drawMantleSprite(angle: number) {
@@ -212,7 +225,7 @@ export class Renderer {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.translate(pivotX, pivotY)
     ctx.rotate(-angle)
-    ctx.drawImage(sprite.canvas, spriteLeft - pivotX, spriteTop - pivotY, sprite.width, sprite.height)
+    ctx.drawImage(sprite.image, spriteLeft - pivotX, spriteTop - pivotY, sprite.width, sprite.height)
     this.useWorldTransform()
   }
 
@@ -278,18 +291,30 @@ export class Renderer {
   private drawRocks(sim: Sim, showLoad: boolean) {
     const ctx = this.viewContext
     const { scale, originX, originY, dpr } = this.frame
+    this.frameNumber++
     for (const rock of sim.rocks.byCollider.values()) {
       const angle = rock.body.rotation()
       const sprite = this.rockSpriteFor(sim.rocks, rock, angle)
+      sprite.lastDrawn = this.frameNumber
       const center = rock.body.translation()
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.translate(originX + center.x * scale, originY - center.y * scale)
       ctx.rotate(sprite.angle - angle)
-      ctx.drawImage(sprite.canvas, -sprite.centerX, -sprite.centerY, sprite.width, sprite.height)
+      ctx.drawImage(sprite.image, -sprite.centerX, -sprite.centerY, sprite.width, sprite.height)
     }
     this.useWorldTransform()
+    this.releaseUnusedRockSprites()
     if (showLoad) {
       this.drawLoadGlow(sim)
+    }
+  }
+
+  private releaseUnusedRockSprites() {
+    for (const [rock, sprite] of this.rockSprites) {
+      if (sprite.lastDrawn !== this.frameNumber) {
+        sprite.image.close()
+        this.rockSprites.delete(rock)
+      }
     }
   }
 
@@ -298,12 +323,13 @@ export class Renderer {
     if (cached && cached.scale === this.frame.scale && cached.dpr === this.frame.dpr && turnBetween(cached.angle, angle) < REBAKE_TURN) {
       return cached
     }
-    const sprite = this.bakeRock(rocks, rock, angle, cached?.canvas ?? document.createElement('canvas'))
+    cached?.image.close()
+    const sprite = this.bakeRock(rocks, rock, angle)
     this.rockSprites.set(rock, sprite)
     return sprite
   }
 
-  private bakeRock(rocks: RockField, rock: Rock, angle: number, canvas: HTMLCanvasElement): RockSprite {
+  private bakeRock(rocks: RockField, rock: Rock, angle: number): RockSprite {
     const polygon = rock.local.map((p) => rotate(p, angle))
     const bounds = boundsOf(polygon)
     const { scale, dpr } = this.frame
@@ -312,9 +338,7 @@ export class Renderer {
     const height = (bounds.top - bounds.bottom) * scale + margin * 2
     const centerX = margin - bounds.left * scale
     const centerY = margin + bounds.top * scale
-    canvas.width = Math.ceil(width * dpr)
-    canvas.height = Math.ceil(height * dpr)
-    const ctx = contextOf(canvas)
+    const ctx = this.bakeSprite(width, height)
     ctx.setTransform(scale * dpr, 0, 0, -scale * dpr, centerX * dpr, centerY * dpr)
     this.context = ctx
     this.tracePolygon(polygon)
@@ -341,7 +365,7 @@ export class Renderer {
     ctx.strokeStyle = COLORS.rockLit
     ctx.stroke(lit)
     this.context = this.viewContext
-    return { canvas, angle, scale, dpr, width, height, centerX, centerY }
+    return { image: this.bakery.transferToImageBitmap(), angle, scale, dpr, width, height, centerX, centerY, lastDrawn: this.frameNumber }
   }
 
   private drawLoadGlow(sim: Sim) {
@@ -608,6 +632,12 @@ function headingOf(from: Vec, to: Vec): number {
 function rockColor(rock: Rock): string {
   const { hue, saturation, lightness } = rock.look
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`
+}
+
+function toBitmap(source: HTMLCanvasElement): ImageBitmap {
+  const copy = new OffscreenCanvas(source.width, source.height)
+  copy.getContext('2d')?.drawImage(source, 0, 0)
+  return copy.transferToImageBitmap()
 }
 
 function turnBetween(from: number, to: number): number {
