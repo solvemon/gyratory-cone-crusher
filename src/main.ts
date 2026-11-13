@@ -47,6 +47,10 @@ const stopButton = element<HTMLButtonElement>('stop')
 const modeSelector = element<HTMLButtonElement>('mode')
 const pourModeLegend = element<HTMLSpanElement>('mode-pour')
 const breakerModeLegend = element<HTMLSpanElement>('mode-breaker')
+const dispatchSelector = element<HTMLButtonElement>('dispatch')
+const manualDispatchLegend = element<HTMLSpanElement>('dispatch-manual')
+const autoDispatchLegend = element<HTMLSpanElement>('dispatch-auto')
+const truckLamp = element<HTMLSpanElement>('truck-lamp')
 const feedDial = element<HTMLDivElement>('feed')
 const feedValue = element<HTMLOutputElement>('feed-value')
 const slowLamp = element<HTMLSpanElement>('slow-lamp')
@@ -145,16 +149,28 @@ for (const type of ['pointerup', 'pointercancel'] as const) {
 
 function setTool(tool: Tool) {
   settings.tool = tool
-  modeSelector.classList.toggle('breaker', tool === 'breaker')
+  modeSelector.classList.toggle('turned', tool === 'breaker')
   pourModeLegend.classList.toggle('active', tool === 'pour')
   breakerModeLegend.classList.toggle('active', tool === 'breaker')
   showHint()
   saveSettings(settings)
 }
 
-function showHint() {
+function setAutoDispatch(auto: boolean) {
+  settings.autoDispatch = auto
+  dispatchSelector.classList.toggle('turned', auto)
+  manualDispatchLegend.classList.toggle('active', !auto)
+  autoDispatchLegend.classList.toggle('active', auto)
+  saveSettings(settings)
+}
+
+function dockedTruckIsFull(): boolean {
   const docked = sim.trucks.docked
-  if (docked && docked.full) {
+  return docked !== null && docked.full
+}
+
+function showHint() {
+  if (dockedTruckIsFull() && !settings.autoDispatch) {
     hint.textContent = TRUCK_FULL_HINT
     return
   }
@@ -208,10 +224,12 @@ setTool(settings.tool)
 setCrusherRunning(settings.crusherRunning)
 setSlowMotion(settings.slowMotion)
 setPanelCollapsed(settings.panelCollapsed)
+setAutoDispatch(settings.autoDispatch)
 
 startButton.addEventListener('click', () => setCrusherRunning(true))
 stopButton.addEventListener('click', () => setCrusherRunning(false))
 modeSelector.addEventListener('click', toggleTool)
+dispatchSelector.addEventListener('click', () => setAutoDispatch(!settings.autoDispatch))
 slowButton.addEventListener('click', () => setSlowMotion(!settings.slowMotion))
 resetButton.addEventListener('click', reset)
 window.addEventListener('keydown', (event) => {
@@ -229,6 +247,9 @@ window.addEventListener('keydown', (event) => {
   }
   if (event.key === '2') {
     setTool('breaker')
+  }
+  if (event.key === 't' || event.key === 'T') {
+    setAutoDispatch(!settings.autoDispatch)
   }
 })
 window.addEventListener('resize', applyLayout)
@@ -274,6 +295,7 @@ function updateStats(now: number) {
 
 function applyControls() {
   sim.pourer.flow = settings.pourFlow
+  sim.trucks.autoDispatch = settings.autoDispatch
   sim.machine.running = settings.crusherRunning
   sim.pourer.target = null
   sim.breaker.target = null
@@ -308,6 +330,7 @@ function frame(now: number) {
   renderer.draw(sim, sim.pourer.target)
   drawTime.add(performance.now() - drawStart)
   showCrushed(now)
+  truckLamp.classList.toggle('on', dockedTruckIsFull())
   updateStats(now)
   requestAnimationFrame(frame)
 }

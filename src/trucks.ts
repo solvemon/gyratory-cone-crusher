@@ -12,6 +12,7 @@ import {
   TRUCK_EMPTY_TONNES,
   TRUCK_FOLLOW_GAP,
   TRUCK_PAYLOAD_TONNES,
+  TRUCK_AUTO_DISPATCH_DELAY,
   TRUCK_PITCH_PER_ACCELERATION,
   TRUCK_POWER_KW,
   TRUCK_RIMPULL_KN,
@@ -114,6 +115,7 @@ export class Truck {
   wheelTurn = 0
   throttle = 0
   exhaustDue = 0
+  timeFull = 0
   private pitchVelocity = 0
   private heap: Collider | null = null
   private world: World
@@ -192,6 +194,9 @@ export class Truck {
     this.settleAtDock()
     this.wheelTurn -= (this.velocity * dt) / TRUCK.wheelRadius
     this.updateSuspension(dt)
+    if (this.full) {
+      this.timeFull += dt
+    }
     this.body.setNextKinematicTranslation({ x: this.x, y: GROUND_Y + this.sag })
   }
 
@@ -260,6 +265,7 @@ export class Truck {
 
 export class TruckYard {
   trucks: Truck[] = []
+  autoDispatch = false
   private world: World
 
   constructor(world: World) {
@@ -282,6 +288,7 @@ export class TruckYard {
       truck.free()
     }
     this.trucks = this.trucks.filter((truck) => !truck.gone)
+    this.dispatchWhenFull()
   }
 
   swallows(point: Vec): boolean {
@@ -301,8 +308,19 @@ export class TruckYard {
     if (!truck) {
       return false
     }
+    this.send(truck)
+    return true
+  }
+
+  private send(truck: Truck) {
     truck.depart()
     this.trucks.push(new Truck(this.world, TRUCK_SPAWN_X, 'arriving', TRUCK_CRUISE_SPEED))
-    return true
+  }
+
+  private dispatchWhenFull() {
+    const docked = this.docked
+    if (this.autoDispatch && docked && docked.timeFull >= TRUCK_AUTO_DISPATCH_DELAY) {
+      this.send(docked)
+    }
   }
 }

@@ -452,7 +452,7 @@ button:focus-visible,
   border-radius: 1px;
 }
 
-.selector.breaker .selector-handle {
+.selector.turned .selector-handle {
   transform: rotate(40deg);
 }
 

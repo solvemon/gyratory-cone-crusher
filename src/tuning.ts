@@ -60,6 +60,7 @@ export const TRUCK_SUSPENSION_HZ = 0.9
 export const TRUCK_SUSPENSION_DAMPING = 0.35
 export const TRUCK_SAG = 0.18
 export const TRUCK_EXHAUST_PUFFS_PER_SECOND = 3
+export const TRUCK_AUTO_DISPATCH_DELAY = 1.5
 export const STEEL_SPARK_CHANCE = 0.3
 
 export const BREAKER_RESPONSE = 4
