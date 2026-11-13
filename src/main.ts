@@ -25,7 +25,6 @@ const TRUCK_FULL_HINT = 'Truck full · tap it to send it off'
 const PASTED_TEXT_LIMIT = 80
 const SUGGESTION_SECONDS = 2.5
 
-const SLOW_MOTION_SPEED = 0.2
 const MAX_STEPS_PER_FRAME = 4
 
 function element<T extends HTMLElement>(id: string): T {
@@ -67,8 +66,6 @@ const picturePick = element<HTMLButtonElement>('picture-pick')
 const pictureFile = element<HTMLInputElement>('picture-file')
 const feedDial = element<HTMLDivElement>('feed')
 const feedValue = element<HTMLOutputElement>('feed-value')
-const slowLamp = element<HTMLSpanElement>('slow-lamp')
-const slowButton = element<HTMLButtonElement>('slow')
 const resetButton = element<HTMLButtonElement>('reset')
 const crushed = element<HTMLDivElement>('crushed')
 const stats = element<HTMLDivElement>('stats')
@@ -250,12 +247,6 @@ function setCrusherRunning(running: boolean) {
   saveSettings(settings)
 }
 
-function setSlowMotion(slowMotion: boolean) {
-  settings.slowMotion = slowMotion
-  slowLamp.classList.toggle('on', slowMotion)
-  saveSettings(settings)
-}
-
 function reset() {
   sim.free()
   sim = new Sim()
@@ -281,7 +272,6 @@ mountDial(feedDial, {
 showPourFlow()
 setTool(settings.tool)
 setCrusherRunning(settings.crusherRunning)
-setSlowMotion(settings.slowMotion)
 setPanelCollapsed(settings.panelCollapsed)
 setAutoDispatch(settings.autoDispatch)
 setSolverOpen(settings.solverOpen)
@@ -384,14 +374,10 @@ startButton.addEventListener('click', () => setCrusherRunning(true))
 stopButton.addEventListener('click', () => setCrusherRunning(false))
 modeSelector.addEventListener('click', toggleTool)
 dispatchSelector.addEventListener('click', () => setAutoDispatch(!settings.autoDispatch))
-slowButton.addEventListener('click', () => setSlowMotion(!settings.slowMotion))
 resetButton.addEventListener('click', reset)
 window.addEventListener('keydown', (event) => {
   if (event.target instanceof HTMLInputElement) {
     return
-  }
-  if (event.key === 's' || event.key === 'S') {
-    setSlowMotion(!settings.slowMotion)
   }
   if (event.key === 'r' || event.key === 'R') {
     reset()
@@ -420,13 +406,6 @@ document.addEventListener('visibilitychange', () => {
   }
 })
 new ResizeObserver(applyLayout).observe(panel)
-
-function simulationSpeed(): number {
-  if (settings.slowMotion) {
-    return SLOW_MOTION_SPEED
-  }
-  return 1
-}
 
 const volumeFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
@@ -478,7 +457,7 @@ function frame(now: number) {
   const simulationStart = performance.now()
   let steps = 0
   while (pendingTime >= STEP_DT && steps < MAX_STEPS_PER_FRAME) {
-    sim.step(STEP_DT * simulationSpeed(), pacing.catchUp)
+    sim.step(STEP_DT, pacing.catchUp)
     pendingTime -= STEP_DT
     steps++
   }

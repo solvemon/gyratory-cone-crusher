@@ -7,7 +7,6 @@ export type Settings = {
   crusherRunning: boolean
   pourFlow: number
   tool: Tool
-  slowMotion: boolean
   panelCollapsed: boolean
   autoDispatch: boolean
   solverOpen: boolean
@@ -20,7 +19,6 @@ const DEFAULTS: Settings = {
   crusherRunning: true,
   pourFlow: POUR_FLOW_DEFAULT,
   tool: 'pour',
-  slowMotion: false,
   panelCollapsed: false,
   autoDispatch: false,
   solverOpen: true,
@@ -49,7 +47,6 @@ export function loadSettings(): Settings {
     crusherRunning: storedField(fields, 'crusherRunning', isBoolean),
     pourFlow: storedField(fields, 'pourFlow', isFlow),
     tool: storedField(fields, 'tool', isTool),
-    slowMotion: storedField(fields, 'slowMotion', isBoolean),
     panelCollapsed: storedField(fields, 'panelCollapsed', isBoolean),
     autoDispatch: storedField(fields, 'autoDispatch', isBoolean),
     solverOpen: storedField(fields, 'solverOpen', isBoolean),
