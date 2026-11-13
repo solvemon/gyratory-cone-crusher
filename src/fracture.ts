@@ -145,6 +145,36 @@ function isSolidPiece(piece: Vec[]): boolean {
   return piece.length >= 3 && compactness(piece) > MIN_COMPACTNESS
 }
 
+type Crack = { origin: Vec; normal: Vec }
+
+function blowCracks(polygon: Vec[], point: Vec, direction: Vec): Crack[] {
+  const centroid = polygonCentroid(polygon)
+  const alongBlow = [point, scale(add(point, centroid), 0.5), centroid]
+  const cracks: Crack[] = []
+  for (const origin of alongBlow) {
+    for (let attempt = 0; attempt < CUT_ATTEMPTS; attempt++) {
+      cracks.push({ origin, normal: perpendicular(rotate(direction, randomBetween(-0.2, 0.2))) })
+    }
+  }
+  for (let attempt = 0; attempt < CUT_ATTEMPTS; attempt++) {
+    cracks.push({ origin: centroid, normal: rotate(direction, randomBetween(-0.3, 0.3)) })
+  }
+  for (let attempt = 0; attempt < CUT_ATTEMPTS; attempt++) {
+    cracks.push({ origin: centroid, normal: rotate(direction, randomBetween(0, Math.PI)) })
+  }
+  return cracks
+}
+
+function firstSolidSplit(polygon: Vec[], cracks: Crack[]): Vec[][] | null {
+  for (const crack of cracks) {
+    const halves = splitPolygon(polygon, crack.origin, crack.normal)
+    if (halves.every(isSolidPiece)) {
+      return halves
+    }
+  }
+  return null
+}
+
 function blend(previous: number, next: number, dt: number): number {
   const keep = Math.exp(-dt / LOAD_SMOOTHING)
   return previous * keep + next * (1 - keep)
@@ -259,19 +289,17 @@ export class Fracturer {
 
   private splitAlong(rock: Rock, point: Vec, direction: Vec): boolean {
     const polygon = this.rocks.worldPolygon(rock)
-    for (let attempt = 0; attempt < CUT_ATTEMPTS; attempt++) {
-      const crackNormal = perpendicular(rotate(direction, randomBetween(-0.2, 0.2)))
-      const halves = splitPolygon(polygon, point, crackNormal)
-      if (halves.every(isSolidPiece)) {
-        this.replace(rock, halves, 0.5)
-        this.effects.dust(point, polygonArea(polygon) * 0.04, { x: 0, y: 0 }, rock.size * 0.25)
-        this.effects.puff(point, rock.size)
-        this.counters.cracks++
-        return true
-      }
+    const halves = firstSolidSplit(polygon, blowCracks(polygon, point, direction))
+    if (!halves) {
+      return false
     }
-    return false
+    this.replace(rock, halves, 0.5)
+    this.effects.dust(point, polygonArea(polygon) * 0.04, { x: 0, y: 0 }, rock.size * 0.25)
+    this.effects.puff(point, rock.size)
+    this.counters.cracks++
+    return true
   }
+
 
   private sparkAgainstSteel(squeeze: Squeeze) {
     if (!squeeze.steel || Math.random() > STEEL_SPARK_CHANCE) {
