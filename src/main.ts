@@ -10,7 +10,7 @@ import { createGrimeTile, createSteelTile } from './textures.ts'
 import { loadSettings, saveSettings } from './settings.ts'
 import { CrushedTally } from './tally.ts'
 import { problemSheet, skinFromImage } from './skins.ts'
-import { forgetProblem, loadOwnProblems, PRESET_PROBLEMS, rememberProblem } from './problems.ts'
+import { forgetProblem, loadOwnProblems, PROBLEM_SUGGESTIONS, rememberProblem } from './problems.ts'
 import type { Tool } from './settings.ts'
 import { POUR_FLOW_MAX, POUR_FLOW_MIN, STEP_DT } from './tuning.ts'
 import type { Vec } from './geometry.ts'
@@ -23,6 +23,7 @@ const TOOL_HINTS: Record<Tool, string> = {
 const TRUCK_FULL_HINT = 'Truck full · tap it to send it off'
 
 const PASTED_TEXT_LIMIT = 80
+const SUGGESTION_SECONDS = 2.5
 
 const SLOW_MOTION_SPEED = 0.2
 const MAX_STEPS_PER_FRAME = 4
@@ -289,20 +290,25 @@ autoFeedButton.addEventListener('click', () => setAutoFeed(!settings.autoFeed))
 
 let ownProblems = loadOwnProblems()
 
-function problemKey(problem: string): HTMLButtonElement {
-  const key = document.createElement('button')
-  key.type = 'button'
-  key.className = 'key'
-  key.textContent = problem
-  key.addEventListener('click', () => crushProblem(problem))
-  return key
+let suggestionIndex = 0
+
+function showSuggestion() {
+  problemText.placeholder = PROBLEM_SUGGESTIONS[suggestionIndex]
+}
+
+function advanceSuggestion() {
+  suggestionIndex = (suggestionIndex + 1) % PROBLEM_SUGGESTIONS.length
+  showSuggestion()
 }
 
 function ownProblemKey(problem: string): HTMLSpanElement {
   const group = document.createElement('span')
   group.className = 'key-group'
-  const key = problemKey(problem)
-  key.classList.add('own')
+  const key = document.createElement('button')
+  key.type = 'button'
+  key.className = 'key own'
+  key.textContent = problem
+  key.addEventListener('click', () => crushProblem(problem))
   const remove = document.createElement('button')
   remove.type = 'button'
   remove.className = 'key own remove'
@@ -317,17 +323,19 @@ function ownProblemKey(problem: string): HTMLSpanElement {
 }
 
 function showProblemKeys() {
-  problemList.replaceChildren(...PRESET_PROBLEMS.map(problemKey), ...ownProblems.map(ownProblemKey))
+  problemList.replaceChildren(...ownProblems.map(ownProblemKey))
 }
 
 showProblemKeys()
+showSuggestion()
+window.setInterval(advanceSuggestion, SUGGESTION_SECONDS * 1000)
 solverToggle.addEventListener('click', () => setSolverOpen(!settings.solverOpen))
 problemForm.addEventListener('submit', (event) => {
   event.preventDefault()
-  const problem = problemText.value.trim()
+  let problem = problemText.value.trim()
   problemText.value = ''
   if (!problem) {
-    return
+    problem = PROBLEM_SUGGESTIONS[suggestionIndex]
   }
   crushProblem(problem)
   ownProblems = rememberProblem(ownProblems, problem)

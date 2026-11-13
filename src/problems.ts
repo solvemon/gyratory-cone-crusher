@@ -1,6 +1,6 @@
 import { readStored, writeStored } from './storage.ts'
 
-export const PRESET_PROBLEMS = [
+export const PROBLEM_SUGGESTIONS = [
   'Self doubt',
   'Insecure',
   'Broke',
@@ -27,10 +27,6 @@ export function loadOwnProblems(): string[] {
 }
 
 export function rememberProblem(own: string[], problem: string): string[] {
-  const isPreset = PRESET_PROBLEMS.some((preset) => sameProblem(preset, problem))
-  if (isPreset) {
-    return own
-  }
   const others = own.filter((item) => !sameProblem(item, problem))
   const updated = [problem, ...others].slice(0, MOST_OWN_PROBLEMS)
   writeStored(STORAGE_KEY, updated)

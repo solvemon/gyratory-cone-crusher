@@ -581,6 +581,10 @@ button:focus-visible,
   display: none;
 }
 
+.problems:empty {
+  display: none;
+}
+
 .problems {
   display: flex;
   flex-wrap: wrap;
