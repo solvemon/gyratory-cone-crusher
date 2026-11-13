@@ -19,11 +19,18 @@ body {
   overflow: hidden;
 }
 
-#view {
+.layer {
   position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
+}
+
+.layer.passive {
+  pointer-events: none;
+}
+
+#view {
   touch-action: none;
   cursor: crosshair;
 }

@@ -3,7 +3,7 @@ import { BOOM, HAMMER_SHAPE } from './breaker.ts'
 import type { BoomPose } from './breaker.ts'
 import type { Vec } from './geometry.ts'
 import { BELT, ESSENTIAL_VIEW, MANTLE_PARTS, PIVOT, STATIC_PARTS, VIEW } from './machine.ts'
-import type { Rock } from './rocks.ts'
+import type { Rock, RockField } from './rocks.ts'
 import type { Sim } from './sim.ts'
 import { createPaintTile, createPuffSprite, createRockTile, createSteelTile } from './textures.ts'
 
@@ -12,9 +12,13 @@ const STEEL_TEXTURE_METERS_PER_PIXEL = 5 / 512
 const LIGHT = normalize({ x: -0.55, y: 0.85 })
 const NO_ROTATION = { anchor: { x: 0, y: 0 }, angle: 0 }
 const EDGE_GRIME_STEPS = [1, 0.85, 0.7, 0.56, 0.43, 0.31, 0.2, 0.1]
+const MAX_PIXEL_RATIO = 2
+const SPRITE_MARGIN_PIXELS = 4
+const MANTLE_AXIS_LENGTH = 15
+const REBAKE_TURN = 0.35
+const MIN_VISIBLE_LOAD = 0.05
 
 type Placement = { anchor: Vec; angle: number }
-type DrawnRock = { rock: Rock; polygon: Vec[] }
 
 const COLORS = {
   background: '#0a1017',
@@ -51,7 +55,44 @@ function placeWindow(preferredMin: number, preferredMax: number, essentialMin: n
   return Math.min(essentialMin, Math.max(essentialMax - size, centered))
 }
 
+export type Layers = {
+  backdrop: HTMLCanvasElement
+  view: HTMLCanvasElement
+  steel: HTMLCanvasElement
+  tools: HTMLCanvasElement
+}
+
+type RockSprite = {
+  canvas: HTMLCanvasElement
+  angle: number
+  scale: number
+  dpr: number
+  width: number
+  height: number
+  centerX: number
+  centerY: number
+}
+
+type Sprite = { canvas: HTMLCanvasElement; world: Bounds; margin: number; width: number; height: number }
+
+function contextOf(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('Canvas 2D is not available')
+  }
+  return context
+}
+
+function poseSignature(pose: BoomPose, pourTarget: Vec | null): string {
+  const numbers = [pose.tip.x, pose.tip.y, pose.elbow.x, pose.elbow.y, pose.angle * 10]
+  if (pourTarget) {
+    numbers.push(pourTarget.x, pourTarget.y)
+  }
+  return numbers.map((value) => value.toFixed(3)).join(',')
+}
+
 export class Renderer {
+  layers: Layers
   canvas: HTMLCanvasElement
   context: CanvasRenderingContext2D
   frame: Frame = { scale: 1, originX: 0, originY: 0, dpr: 1 }
@@ -60,14 +101,16 @@ export class Renderer {
   steelTexture: CanvasPattern
   paintTexture: CanvasPattern
   puffSprite: HTMLCanvasElement
+  private viewContext: CanvasRenderingContext2D
+  private mantleSprite: Sprite | null = null
+  private toolsSignature = ''
+  private rockSprites = new WeakMap<Rock, RockSprite>()
 
-  constructor(canvas: HTMLCanvasElement) {
-    this.canvas = canvas
-    const context = canvas.getContext('2d')
-    if (!context) {
-      throw new Error('Canvas 2D is not available')
-    }
-    this.context = context
+  constructor(layers: Layers) {
+    this.layers = layers
+    this.canvas = layers.view
+    this.viewContext = contextOf(layers.view)
+    this.context = this.viewContext
     this.rockTexture = this.pattern(createRockTile())
     this.steelTexture = this.pattern(createSteelTile())
     this.paintTexture = this.pattern(createPaintTile())
@@ -75,11 +118,13 @@ export class Renderer {
   }
 
   resize(area: ScreenArea) {
-    const dpr = window.devicePixelRatio || 1
+    const dpr = Math.min(MAX_PIXEL_RATIO, window.devicePixelRatio || 1)
     const width = this.canvas.clientWidth
     const height = this.canvas.clientHeight
-    this.canvas.width = Math.round(width * dpr)
-    this.canvas.height = Math.round(height * dpr)
+    for (const layer of Object.values(this.layers)) {
+      layer.width = Math.round(width * dpr)
+      layer.height = Math.round(height * dpr)
+    }
     const essentialWidth = ESSENTIAL_VIEW.right - ESSENTIAL_VIEW.left
     const essentialHeight = ESSENTIAL_VIEW.top - ESSENTIAL_VIEW.bottom
     const scale = Math.min(area.width / essentialWidth, area.height / essentialHeight)
@@ -94,6 +139,7 @@ export class Renderer {
     const topLeft = this.screenToWorld(0, 0)
     const bottomRight = this.screenToWorld(width, height)
     this.visible = { left: topLeft.x, right: bottomRight.x, bottom: bottomRight.y, top: topLeft.y }
+    this.paintFixedLayers()
   }
 
   screenToWorld(x: number, y: number): Vec {
@@ -101,22 +147,85 @@ export class Renderer {
   }
 
   draw(sim: Sim, pourTarget: Vec | null, showLoad: boolean) {
-    const ctx = this.context
-    const { dpr } = this.frame
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.fillStyle = COLORS.background
-    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
-
+    const ctx = this.viewContext
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
     this.useWorldTransform()
-    this.drawGrid()
     this.drawRocks(sim, showLoad)
     this.drawGrains(sim)
     this.drawPuffs(sim)
     this.drawSparks(sim)
-    this.drawStatic()
-    this.drawMantle(sim.machine.angle)
-    this.drawBreaker(sim.breaker.pose())
-    this.drawPourMarker(pourTarget)
+    this.drawMantleSprite(sim.machine.angle)
+    this.drawTools(sim.breaker.pose(), pourTarget)
+  }
+
+  private paintOn(canvas: HTMLCanvasElement, paint: () => void) {
+    this.context = contextOf(canvas)
+    this.context.setTransform(1, 0, 0, 1, 0, 0)
+    this.context.clearRect(0, 0, canvas.width, canvas.height)
+    this.useWorldTransform()
+    paint()
+    this.context = this.viewContext
+  }
+
+  private paintFixedLayers() {
+    this.paintOn(this.layers.backdrop, () => {
+      const { left, right, bottom, top } = this.visible
+      this.context.fillStyle = COLORS.background
+      this.context.fillRect(left, bottom, right - left, top - bottom)
+      this.drawGrid()
+    })
+    this.paintOn(this.layers.steel, () => this.drawStatic())
+    this.mantleSprite = this.paintMantleSprite()
+    this.toolsSignature = ''
+  }
+
+  private paintMantleSprite(): Sprite {
+    const outline = boundsOf(MANTLE_PARTS.flat())
+    const world = { ...outline, bottom: Math.min(outline.bottom, PIVOT.y - MANTLE_AXIS_LENGTH) }
+    const { scale, dpr } = this.frame
+    const margin = SPRITE_MARGIN_PIXELS
+    const width = (world.right - world.left) * scale + margin * 2
+    const height = (world.top - world.bottom) * scale + margin * 2
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.ceil(width * dpr)
+    canvas.height = Math.ceil(height * dpr)
+    const sprite = contextOf(canvas)
+    sprite.setTransform(scale * dpr, 0, 0, -scale * dpr, (margin - world.left * scale) * dpr, (margin + world.top * scale) * dpr)
+    this.context = sprite
+    this.drawMantle(0)
+    this.context = this.viewContext
+    return { canvas, world, margin, width, height }
+  }
+
+  private drawMantleSprite(angle: number) {
+    const sprite = this.mantleSprite
+    if (!sprite) {
+      return
+    }
+    const ctx = this.viewContext
+    const { scale, originX, originY, dpr } = this.frame
+    const pivotX = originX + PIVOT.x * scale
+    const pivotY = originY - PIVOT.y * scale
+    const spriteLeft = originX + sprite.world.left * scale - sprite.margin
+    const spriteTop = originY - sprite.world.top * scale - sprite.margin
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.translate(pivotX, pivotY)
+    ctx.rotate(-angle)
+    ctx.drawImage(sprite.canvas, spriteLeft - pivotX, spriteTop - pivotY, sprite.width, sprite.height)
+    this.useWorldTransform()
+  }
+
+  private drawTools(pose: BoomPose, pourTarget: Vec | null) {
+    const signature = poseSignature(pose, pourTarget)
+    if (signature === this.toolsSignature) {
+      return
+    }
+    this.toolsSignature = signature
+    this.paintOn(this.layers.tools, () => {
+      this.drawBreaker(pose)
+      this.drawPourMarker(pourTarget)
+    })
   }
 
   private useWorldTransform() {
@@ -167,49 +276,95 @@ export class Renderer {
   }
 
   private drawRocks(sim: Sim, showLoad: boolean) {
-    const ctx = this.context
-    const drawn: DrawnRock[] = []
+    const ctx = this.viewContext
+    const { scale, originX, originY, dpr } = this.frame
     for (const rock of sim.rocks.byCollider.values()) {
-      const polygon = sim.rocks.worldPolygon(rock)
-      drawn.push({ rock, polygon })
-      this.tracePolygon(polygon)
-      ctx.fillStyle = rockColor(rock, showLoad)
-      ctx.fill()
+      const angle = rock.body.rotation()
+      const sprite = this.rockSpriteFor(sim.rocks, rock, angle)
+      const center = rock.body.translation()
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.translate(originX + center.x * scale, originY - center.y * scale)
+      ctx.rotate(sprite.angle - angle)
+      ctx.drawImage(sprite.canvas, -sprite.centerX, -sprite.centerY, sprite.width, sprite.height)
     }
+    this.useWorldTransform()
+    if (showLoad) {
+      this.drawLoadGlow(sim)
+    }
+  }
 
+  private rockSpriteFor(rocks: RockField, rock: Rock, angle: number): RockSprite {
+    const cached = this.rockSprites.get(rock)
+    if (cached && cached.scale === this.frame.scale && cached.dpr === this.frame.dpr && turnBetween(cached.angle, angle) < REBAKE_TURN) {
+      return cached
+    }
+    const sprite = this.bakeRock(rocks, rock, angle, cached?.canvas ?? document.createElement('canvas'))
+    this.rockSprites.set(rock, sprite)
+    return sprite
+  }
+
+  private bakeRock(rocks: RockField, rock: Rock, angle: number, canvas: HTMLCanvasElement): RockSprite {
+    const polygon = rock.local.map((p) => rotate(p, angle))
+    const bounds = boundsOf(polygon)
+    const { scale, dpr } = this.frame
+    const margin = SPRITE_MARGIN_PIXELS
+    const width = (bounds.right - bounds.left) * scale + margin * 2
+    const height = (bounds.top - bounds.bottom) * scale + margin * 2
+    const centerX = margin - bounds.left * scale
+    const centerY = margin + bounds.top * scale
+    canvas.width = Math.ceil(width * dpr)
+    canvas.height = Math.ceil(height * dpr)
+    const ctx = contextOf(canvas)
+    ctx.setTransform(scale * dpr, 0, 0, -scale * dpr, centerX * dpr, centerY * dpr)
+    this.context = ctx
+    this.tracePolygon(polygon)
+    ctx.fillStyle = rockColor(rock)
+    ctx.fill()
+    const texture = rocks.textureFrame(rock)
+    const anchor = sub(texture.anchor, rock.body.translation())
+    this.rockTexture.setTransform(placementMatrix({ anchor, angle: texture.angle }, ROCK_TEXTURE_METERS_PER_PIXEL))
     ctx.globalCompositeOperation = 'overlay'
     ctx.fillStyle = this.rockTexture
-    for (const { rock, polygon } of drawn) {
-      this.rockTexture.setTransform(placementMatrix(sim.rocks.textureFrame(rock), ROCK_TEXTURE_METERS_PER_PIXEL))
-      this.tracePolygon(polygon)
-      ctx.fill()
-    }
+    ctx.fill()
     ctx.globalCompositeOperation = 'source-over'
-
     const lit = new Path2D()
     const shaded = new Path2D()
-    const outlines = new Path2D()
-    for (const { polygon } of drawn) {
-      addShadedEdges(polygon, lit, shaded, outlines)
-    }
+    const outline = new Path2D()
+    addShadedEdges(polygon, lit, shaded, outline)
     ctx.lineJoin = 'round'
     ctx.lineWidth = this.pixels(1)
     ctx.strokeStyle = COLORS.rockOutline
-    ctx.stroke(outlines)
+    ctx.stroke(outline)
     ctx.lineWidth = this.pixels(1.5)
     ctx.strokeStyle = COLORS.rockShade
     ctx.stroke(shaded)
     ctx.strokeStyle = COLORS.rockLit
     ctx.stroke(lit)
+    this.context = this.viewContext
+    return { canvas, angle, scale, dpr, width, height, centerX, centerY }
+  }
+
+  private drawLoadGlow(sim: Sim) {
+    const ctx = this.viewContext
+    for (const rock of sim.rocks.byCollider.values()) {
+      const load = Math.min(1, rock.stress)
+      if (load < MIN_VISIBLE_LOAD) {
+        continue
+      }
+      this.tracePolygon(sim.rocks.worldPolygon(rock))
+      ctx.fillStyle = `hsla(28, 85%, 60%, ${load * 0.85})`
+      ctx.fill()
+    }
   }
 
   private drawGrains(sim: Sim) {
     const ctx = this.context
+    ctx.fillStyle = `rgb(${COLORS.dust})`
     for (const grain of sim.effects.grains) {
-      const alpha = 0.75 * (1 - grain.age / grain.life)
-      ctx.fillStyle = `rgba(${COLORS.dust}, ${alpha})`
+      ctx.globalAlpha = 0.75 * (1 - grain.age / grain.life)
       ctx.fillRect(grain.x - grain.size / 2, grain.y - grain.size / 2, grain.size, grain.size)
     }
+    ctx.globalAlpha = 1
   }
 
   private drawPuffs(sim: Sim) {
@@ -342,7 +497,7 @@ export class Renderer {
     ctx.lineTo(cone[3].x, cone[3].y)
     ctx.stroke()
 
-    const axisEnd = add(rotate({ x: 0, y: -15 }, angle), PIVOT)
+    const axisEnd = add(rotate({ x: 0, y: -MANTLE_AXIS_LENGTH }, angle), PIVOT)
     ctx.setLineDash([this.pixels(6), this.pixels(6)])
     ctx.strokeStyle = COLORS.ghost
     ctx.lineWidth = this.pixels(1)
@@ -450,16 +605,14 @@ function headingOf(from: Vec, to: Vec): number {
   return Math.atan2(to.y - from.y, to.x - from.x)
 }
 
-function rockColor(rock: Rock, showLoad: boolean): string {
+function rockColor(rock: Rock): string {
   const { hue, saturation, lightness } = rock.look
-  if (!showLoad) {
-    return `hsl(${hue}, ${saturation}%, ${lightness}%)`
-  }
-  const load = Math.min(1, rock.stress)
-  const hotHue = hue + (28 - hue) * load
-  const hotSaturation = saturation + (85 - saturation) * load
-  const hotLightness = lightness + (60 - lightness) * load
-  return `hsl(${hotHue}, ${hotSaturation}%, ${hotLightness}%)`
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`
+}
+
+function turnBetween(from: number, to: number): number {
+  const turn = to - from
+  return Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn)))
 }
 
 function addShadedEdges(polygon: Vec[], lit: Path2D, shaded: Path2D, outlines: Path2D) {

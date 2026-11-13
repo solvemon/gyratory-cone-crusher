@@ -55,7 +55,12 @@ const hint = element<HTMLDivElement>('hint')
 const panel = element<HTMLDivElement>('panel')
 const nameplate = element<HTMLDivElement>('panel-nameplate')
 const collapseButton = element<HTMLButtonElement>('collapse')
-const renderer = new Renderer(canvas)
+const renderer = new Renderer({
+  backdrop: element<HTMLCanvasElement>('backdrop'),
+  view: canvas,
+  steel: element<HTMLCanvasElement>('steel'),
+  tools: element<HTMLCanvasElement>('tools'),
+})
 
 let sim = new Sim()
 const settings = loadSettings()
